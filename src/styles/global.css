@@ -1,0 +1,243 @@
+/* Global CSS */
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap");
+
+/* Reset & Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: "Montserrat", "Roboto", -apple-system, BlinkMacSystemFont,
+    sans-serif;
+  background-color: #f5f7fa;
+  color: #333;
+  line-height: 1.6;
+  font-size: 16px;
+  overflow-x: hidden;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Container */
+.container {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+@media (min-width: 768px) {
+  .container {
+    padding: 0 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    padding: 0 48px;
+  }
+}
+
+/* Layout Utils */
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-4 {
+  gap: 1rem;
+}
+
+.gap-8 {
+  gap: 2rem;
+}
+
+/* Main App Structure */
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+main {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+/* Colors */
+:root {
+  /* Primary Colors */
+  --color-primary: #ff3a2f;
+  --color-primary-light: #ff6b63;
+  --color-primary-dark: #d92519;
+
+  /* Secondary Colors */
+  --color-secondary: #4a6aff;
+  --color-secondary-light: #7a91ff;
+  --color-secondary-dark: #3a4fcf;
+
+  /* Accent Colors */
+  --color-accent: #ffb800;
+  --color-accent-light: #ffca40;
+  --color-accent-dark: #d99c00;
+
+  /* Feedback Colors */
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+  --color-info: #17a2b8;
+
+  /* Background Colors */
+  --color-background: #f5f7fa;
+  --color-background-light: #ffffff;
+  --color-background-dark: #e5e9f0;
+
+  /* Text Colors */
+  --color-text-primary: #333333;
+  --color-text-secondary: #565656;
+  --color-text-tertiary: #888888;
+
+  /* Border Colors */
+  --color-border: #e1e4e8;
+}
+
+/* Fix for sections spacing */
+section {
+  margin-bottom: 60px;
+}
+
+@media (max-width: 768px) {
+  section {
+    margin-bottom: 40px;
+  }
+}
+
+/* Footer spacing fix */
+footer {
+  position: relative;
+  z-index: 10;
+  margin-top: 80px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Enhanced text contrast */
+p,
+li,
+/* span, */
+div {
+  color: #333;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #222;
+  font-weight: 700;
+}
+
+/* Card improvements */
+.card {
+  background-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Button enhancements */
+button,
+.button {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* Layout spacing */
+.page-container {
+  padding-top: 2rem;
+  padding-bottom: 4rem;
+}
+
+/* Override default link styles for better contrast */
+a:not([class]) {
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+a:not([class]):hover {
+  color: var(--color-primary-dark);
+}
+
+/* Utility Classes */
+.text-center {
+  text-align: center;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.flex-center {
+  justify-content: center;
+  align-items: center;
+}
+
+.gap-sm {
+  gap: 8px;
+}
+
+.gap-md {
+  gap: 16px;
+}
+
+.gap-lg {
+  gap: 24px;
+}
+
+/* Ensure content does not overflow and cause scrolling issues */
+.overflow-hidden {
+  overflow: hidden;
+}
