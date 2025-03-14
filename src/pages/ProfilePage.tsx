@@ -5,6 +5,10 @@ import { Link } from 'react-router-dom';
 import { FiUser, FiMail, FiPhone, FiEdit, FiCalendar, FiMapPin, FiClock } from 'react-icons/fi';
 import Button from '../components/ui/Button';
 import { GameCardProps } from '../components/ui/GameCard';
+import { useAuth } from '../contexts/AuthContext';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 interface UserProfile {
   id: string;
@@ -20,110 +24,99 @@ interface UserStats {
   upcomingGames: number;
 }
 
-// Временные данные для демонстрации
-const MOCK_USER_PROFILE: UserProfile = {
-  id: 'user1',
-  name: 'John Smith',
-  email: 'john.smith@example.com',
-  phone: '+7 (999) 123-45-67',
-  avatar: null,
-};
-
-const MOCK_USER_STATS: UserStats = {
-  gamesCreated: 5,
-  gamesParticipated: 12,
-  upcomingGames: 3,
-};
-
-const MOCK_CREATED_GAMES: GameCardProps[] = [
-  {
-    id: '1',
-    title: 'Еженедельная игра в волейбол',
-    location: 'Спортивный центр "Олимп", Москва',
-    date: '15 июня 2023',
-    time: '18:00 - 20:00',
-    format: 'Круговой турнир',
-    totalSpots: 12,
-    availableSpots: 5,
-    imageUrl: '/images/23.webp',
-  },
-  {
-    id: '2',
-    title: 'Турнир по пляжному волейболу',
-    location: 'Пляж "Солнечный", Сочи',
-    date: '20 июня 2023',
-    time: '10:00 - 16:00',
-    format: 'Single Elimination',
-    totalSpots: 16,
-    availableSpots: 8,
-    imageUrl: '/images/hq720.jpg',
-  },
-];
-
-const MOCK_BOOKED_GAMES: GameCardProps[] = [
-  {
-    id: '3',
-    title: 'Корпоративный турнир',
-    location: 'Спортивный комплекс "Динамо", Санкт-Петербург',
-    date: '25 июня 2023',
-    time: '12:00 - 18:00',
-    format: 'Double Elimination',
-    totalSpots: 24,
-    availableSpots: 0,
-    imageUrl: '/images/crop.webp',
-  },
-  {
-    id: '4',
-    title: 'Любительская лига волейбола',
-    location: 'Школа №123, Казань',
-    date: '30 июня 2023',
-    time: '19:00 - 21:00',
-    format: 'Швейцарская система',
-    totalSpots: 18,
-    availableSpots: 6,
-    imageUrl: '/images/image1.jpg',
-  },
-];
-
 const ProfilePage: React.FC = () => {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [stats, setStats] = useState<UserStats | null>(null);
+  const { currentUser, userData } = useAuth();
+  const [stats, setStats] = useState<UserStats>({
+    gamesCreated: 0,
+    gamesParticipated: 0,
+    upcomingGames: 0
+  });
   const [createdGames, setCreatedGames] = useState<GameCardProps[]>([]);
   const [bookedGames, setBookedGames] = useState<GameCardProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'created' | 'booked'>('created');
 
-  // Имитация загрузки данных с сервера
+  // Загрузка данных из Firestore
   useEffect(() => {
-    setIsLoading(true);
-
-    // Имитация задержки загрузки
-    const timer = setTimeout(() => {
-      setProfile(MOCK_USER_PROFILE);
-      setStats(MOCK_USER_STATS);
-      setCreatedGames(MOCK_CREATED_GAMES);
-      setBookedGames(MOCK_BOOKED_GAMES);
-      setIsLoading(false);
-    }, 800);
-
-    return () => clearTimeout(timer);
-  }, []);
+    if (!currentUser) return;
+    
+    const fetchUserGames = async () => {
+      setIsLoading(true);
+      try {
+        // Поиск игр, созданных пользователем
+        const createdGamesQuery = query(
+          collection(db, 'games'),
+          where('creatorId', '==', currentUser.uid)
+        );
+        const createdGamesSnapshot = await getDocs(createdGamesQuery);
+        const createdGamesData = createdGamesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as GameCardProps[];
+        
+        // Поиск игр, в которых пользователь участвует
+        const bookedGamesQuery = query(
+          collection(db, 'gameParticipants'),
+          where('userId', '==', currentUser.uid)
+        );
+        const bookedGamesSnapshot = await getDocs(bookedGamesQuery);
+        const gameIds = bookedGamesSnapshot.docs.map(doc => doc.data().gameId);
+        
+        // Если пользователь участвует в играх, получаем данные этих игр
+        let bookedGamesData: GameCardProps[] = [];
+        if (gameIds.length > 0) {
+          // Для простоты, можно использовать несколько запросов
+          // В реальном приложении лучше использовать батчинг или другую оптимизацию
+          for (const gameId of gameIds) {
+            const gameQuery = query(
+              collection(db, 'games'),
+              where('id', '==', gameId)
+            );
+            const gameSnapshot = await getDocs(gameQuery);
+            if (!gameSnapshot.empty) {
+              bookedGamesData.push({
+                id: gameSnapshot.docs[0].id,
+                ...gameSnapshot.docs[0].data()
+              } as GameCardProps);
+            }
+          }
+        }
+        
+        // Обновляем состояние
+        setCreatedGames(createdGamesData);
+        setBookedGames(bookedGamesData);
+        setStats({
+          gamesCreated: createdGamesData.length,
+          gamesParticipated: bookedGamesData.length,
+          upcomingGames: [...createdGamesData, ...bookedGamesData].filter(
+            game => new Date(game.date) > new Date()
+          ).length
+        });
+      } catch (error) {
+        console.error('Ошибка при загрузке игр:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchUserGames();
+  }, [currentUser]);
 
   if (isLoading) {
     return (
       <LoadingContainer>
         <LoadingSpinner />
-        <LoadingText>Loading profile...</LoadingText>
+        <LoadingText>Загрузка профиля...</LoadingText>
       </LoadingContainer>
     );
   }
 
-  if (!profile || !stats) {
+  if (!userData) {
     return (
       <ErrorContainer>
-        <ErrorMessage>Failed to load profile</ErrorMessage>
+        <ErrorMessage>Не удалось загрузить профиль</ErrorMessage>
         <Button as={Link} to="/" variant="primary">
-          Back to Home
+          На главную
         </Button>
       </ErrorContainer>
     );
@@ -133,7 +126,7 @@ const ProfilePage: React.FC = () => {
     <PageContainer>
       <div className="container">
         <PageHeader>
-          <PageTitle>My Profile</PageTitle>
+          <PageTitle>Мой профиль</PageTitle>
         </PageHeader>
 
         <ProfileGrid>
@@ -144,23 +137,23 @@ const ProfilePage: React.FC = () => {
           >
             <ProfileHeader>
               <ProfileAvatar>
-                {profile.avatar ? (
-                  <img src={profile.avatar} alt={profile.name} />
+                {userData.photoURL ? (
+                  <img src={userData.photoURL} alt={userData.displayName || ''} />
                 ) : (
                   <FiUser size={48} />
                 )}
               </ProfileAvatar>
               <ProfileInfo>
-                <ProfileName>{profile.name}</ProfileName>
+                <ProfileName>{userData.nickname || userData.displayName || 'Пользователь'}</ProfileName>
                 <ProfileContact>
                   <FiMail />
-                  <span>{profile.email}</span>
+                  <span>{userData.email}</span>
                 </ProfileContact>
-                {profile.phone && (
-                  <ProfileContact>
-                    <FiPhone />
-                    <span>{profile.phone}</span>
-                  </ProfileContact>
+                {userData.height && userData.age && (
+                  <ProfileDetails>
+                    <ProfileDetail>Возраст: {userData.age} лет</ProfileDetail>
+                    <ProfileDetail>Рост: {userData.height} см</ProfileDetail>
+                  </ProfileDetails>
                 )}
               </ProfileInfo>
               <EditProfileButton
@@ -170,22 +163,22 @@ const ProfilePage: React.FC = () => {
                 size="small"
                 leftIcon={<FiEdit />}
               >
-                Edit Profile
+                Редактировать
               </EditProfileButton>
             </ProfileHeader>
 
             <StatsContainer>
               <StatItem>
                 <StatValue>{stats.gamesCreated}</StatValue>
-                <StatLabel>Games Created</StatLabel>
+                <StatLabel>Создано игр</StatLabel>
               </StatItem>
               <StatItem>
                 <StatValue>{stats.gamesParticipated}</StatValue>
-                <StatLabel>Games Participated</StatLabel>
+                <StatLabel>Участие в играх</StatLabel>
               </StatItem>
               <StatItem>
                 <StatValue>{stats.upcomingGames}</StatValue>
-                <StatLabel>Upcoming Games</StatLabel>
+                <StatLabel>Предстоящие игры</StatLabel>
               </StatItem>
             </StatsContainer>
           </ProfileCard>
@@ -200,13 +193,13 @@ const ProfilePage: React.FC = () => {
                 isActive={activeTab === 'created'}
                 onClick={() => setActiveTab('created')}
               >
-                Created Games
+                Созданные игры
               </Tab>
               <Tab
                 isActive={activeTab === 'booked'}
                 onClick={() => setActiveTab('booked')}
               >
-                Booked Games
+                Мои записи
               </Tab>
             </TabsContainer>
 
@@ -239,7 +232,7 @@ const ProfilePage: React.FC = () => {
                             variant="outlined"
                             size="small"
                           >
-                            View Details
+                            Подробнее
                           </Button>
                           <Button
                             as={Link}
@@ -247,7 +240,7 @@ const ProfilePage: React.FC = () => {
                             variant="primary"
                             size="small"
                           >
-                            Edit
+                            Редактировать
                           </Button>
                         </GameActions>
                       </GameContent>
@@ -255,10 +248,12 @@ const ProfilePage: React.FC = () => {
                   ))
                 ) : (
                   <EmptyState>
-                    <EmptyStateText>You haven't created any games yet.</EmptyStateText>
-                    <Button as={Link} to="/games/create" variant="primary">
-                      Create Game
-                    </Button>
+                    <EmptyStateText>У вас нет созданных игр</EmptyStateText>
+                    {userData.role === 'organizer' || userData.role === 'admin' ? (
+                      <Button as={Link} to="/games/create" variant="primary">
+                        Создать игру
+                      </Button>
+                    ) : null}
                   </EmptyState>
                 )
               ) : bookedGames.length > 0 ? (
@@ -288,7 +283,7 @@ const ProfilePage: React.FC = () => {
                           variant="primary"
                           size="small"
                         >
-                          View Details
+                          Подробнее
                         </Button>
                       </GameActions>
                     </GameContent>
@@ -296,9 +291,9 @@ const ProfilePage: React.FC = () => {
                 ))
               ) : (
                 <EmptyState>
-                  <EmptyStateText>You haven't booked any games yet.</EmptyStateText>
+                  <EmptyStateText>Вы не записаны на участие в играх</EmptyStateText>
                   <Button as={Link} to="/games" variant="primary">
-                    Find Game
+                    Найти игры
                   </Button>
                 </EmptyState>
               )}
@@ -533,14 +528,14 @@ const EmptyState = styled.div`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: ${({ theme }) => theme.space.xl} 0;
+  padding: 3rem 1rem;
+  gap: 1.5rem;
   text-align: center;
 `;
 
 const EmptyStateText = styled.p`
-  font-size: ${({ theme }) => theme.fontSizes.lg};
+  font-size: 1rem;
   color: ${({ theme }) => theme.colors.textSecondary};
-  margin-bottom: ${({ theme }) => theme.space.xl};
 `;
 
 const LoadingContainer = styled.div`
@@ -548,28 +543,15 @@ const LoadingContainer = styled.div`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: ${({ theme }) => theme.space['3xl']} 0;
+  height: 50vh;
+  text-align: center;
+  gap: 1rem;
 `;
 
-const LoadingSpinner = styled.div`
-  width: 48px;
-  height: 48px;
-  border: 4px solid rgba(74, 106, 255, 0.2);
-  border-left-color: ${({ theme }) => theme.colors.primary};
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: ${({ theme }) => theme.space.md};
-  
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-`;
-
-const LoadingText = styled.p`
-  font-size: ${({ theme }) => theme.fontSizes.lg};
+const LoadingText = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: 1rem;
+  margin-top: 1rem;
 `;
 
 const ErrorContainer = styled.div`
@@ -585,6 +567,19 @@ const ErrorMessage = styled.p`
   font-size: ${({ theme }) => theme.fontSizes.xl};
   color: ${({ theme }) => theme.colors.danger};
   margin-bottom: ${({ theme }) => theme.space.xl};
+`;
+
+// Добавление нового компонента для информации о профиле
+const ProfileDetails = styled.div`
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+const ProfileDetail = styled.div`
+  font-size: 0.875rem;
+  color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
 export default ProfilePage; 

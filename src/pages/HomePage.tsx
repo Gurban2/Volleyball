@@ -1,11 +1,31 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { FiCalendar, FiMapPin, FiUsers, FiAward } from 'react-icons/fi';
 import Button from '../components/ui/Button';
+import { useAuth } from '../contexts/AuthContext';
 
 const HomePage: React.FC = () => {
+  const { currentUser, userData, isAdmin, isOrganizer } = useAuth();
+  
+  // Функция для проверки, может ли пользователь создавать игры
+  const canCreateGame = () => {
+    if (!currentUser || !userData) return false;
+    return isAdmin() || isOrganizer();
+  };
+  
+  // Для отладки
+  useEffect(() => {
+    console.log('Auth state:', { 
+      currentUser: currentUser ? 'Авторизован' : 'Не авторизован',
+      userData,
+      isAdmin: isAdmin(),
+      isOrganizer: isOrganizer(),
+      canCreateGame: canCreateGame()
+    });
+  }, [currentUser, userData]);
+  
   // Sample data for demonstration
   const featuredGames = [
     {
@@ -46,17 +66,24 @@ const HomePage: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
               >
-                <HeroTitle>Find & Join Volleyball Games Near You</HeroTitle>
+                <HeroTitle>Найдите и присоединяйтесь к волейбольным играм рядом с вами</HeroTitle>
                 <HeroSubtitle>
-                  Connect with local players, organize games, and improve your skills
+                  Общайтесь с местными игроками, организуйте игры и улучшайте свои навыки
                 </HeroSubtitle>
                 <HeroCTA>
                   <Button as={Link} to="/games" variant="primary" size="large">
-                    Find Games
+                    Найти игры
                   </Button>
-                  <Button as={Link} to="/games/create" variant="outlined" size="large" color='white'>
-                    Create Game
-                  </Button>
+                  {canCreateGame() && (
+                    <Button as={Link} to="/games/create" variant="outlined" size="large" color="white">
+                      Создать игру
+                    </Button>
+                  )}
+                  {!currentUser && (
+                    <Button as={Link} to="/register" variant="outlined" size="large" color="white">
+                      Зарегистрироваться
+                    </Button>
+                  )}
                 </HeroCTA>
               </motion.div>
             </HeroContentInner>

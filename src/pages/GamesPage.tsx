@@ -6,6 +6,7 @@ import { FiPlus, FiFilter, FiSearch } from 'react-icons/fi';
 import Button from '../components/ui/Button';
 import GameCard from '../components/ui/GameCard';
 import GameFilters from '../components/ui/GameFilters';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Game {
   id: string;
@@ -96,6 +97,7 @@ interface GamesFilters {
 }
 
 const GamesPage: React.FC = () => {
+  const { currentUser, userData, isAdmin, isOrganizer } = useAuth();
   const [games, setGames] = useState<Game[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +158,23 @@ const GamesPage: React.FC = () => {
   };
 
   const filteredGames = filterGames(games);
+
+  // Функция для проверки, может ли пользователь создавать игры
+  const canCreateGame = () => {
+    if (!currentUser || !userData) return false;
+    return isAdmin() || isOrganizer();
+  };
+  
+  // Для отладки
+  useEffect(() => {
+    console.log('GamesPage - Auth state:', { 
+      currentUser: currentUser ? 'Авторизован' : 'Не авторизован',
+      userData,
+      isAdmin: isAdmin(),
+      isOrganizer: isOrganizer(),
+      canCreateGame: canCreateGame()
+    });
+  }, [currentUser, userData]);
 
   return (
     <PageContainer>
@@ -230,22 +249,43 @@ const GamesPage: React.FC = () => {
           </GamesGrid>
         )}
         
-        <CreateGameCTA>
-          <CTAContent>
-            <CTATitle>Want to organize your own game?</CTATitle>
-            <CTADescription>
-              Create a new volleyball game and invite others to join!
-            </CTADescription>
-          </CTAContent>
-          <Button 
-            variant="primary" 
-            size="lg" 
-            as={Link} 
-            to="/games/create"
-          >
-            Create Game
-          </Button>
-        </CreateGameCTA>
+        {canCreateGame() && (
+          <CreateGameCTA>
+            <CTAContent>
+              <CTATitle>Хотите организовать свою игру?</CTATitle>
+              <CTADescription>
+                Создайте новую волейбольную игру и пригласите других присоединиться!
+              </CTADescription>
+            </CTAContent>
+            <Button 
+              variant="primary" 
+              size="large" 
+              as={Link} 
+              to="/games/create"
+            >
+              Создать игру
+            </Button>
+          </CreateGameCTA>
+        )}
+        
+        {!currentUser && (
+          <CreateGameCTA>
+            <CTAContent>
+              <CTATitle>Хотите организовать свою игру?</CTATitle>
+              <CTADescription>
+                Зарегистрируйтесь, чтобы получить возможность создавать игры и управлять ими!
+              </CTADescription>
+            </CTAContent>
+            <Button 
+              variant="primary" 
+              size="large" 
+              as={Link} 
+              to="/register"
+            >
+              Зарегистрироваться
+            </Button>
+          </CreateGameCTA>
+        )}
       </div>
     </PageContainer>
   );

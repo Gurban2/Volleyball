@@ -4,6 +4,10 @@ import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiUser, FiArrowLeft, FiUpload } from 'react-icons/fi';
 import Button from '../components/ui/Button';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { useAuth } from '../contexts/AuthContext';
+import { uploadFile } from '../firebase/uploadHelpers';
 
 interface UserProfile {
   id: string;
@@ -24,6 +28,7 @@ const MOCK_USER_PROFILE: UserProfile = {
 
 const EditProfilePage: React.FC = () => {
   const navigate = useNavigate();
+  const { currentUser, userData } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<{
@@ -45,24 +50,24 @@ const EditProfilePage: React.FC = () => {
     phone?: string;
   }>({});
 
-  // Имитация загрузки данных с сервера
+  // Загрузка данных пользователя
   useEffect(() => {
     setIsLoading(true);
 
-    // Имитация задержки загрузки
-    const timer = setTimeout(() => {
+    if (userData) {
       setFormData({
-        name: MOCK_USER_PROFILE.name,
-        email: MOCK_USER_PROFILE.email,
-        phone: MOCK_USER_PROFILE.phone,
+        name: userData.displayName || '',
+        email: userData.email || '',
+        phone: '',  // Предполагаем, что этого поля нет в userData
         avatar: null,
-        avatarPreview: MOCK_USER_PROFILE.avatar,
+        avatarPreview: userData.photoURL || null,
       });
       setIsLoading(false);
-    }, 800);
-
-    return () => clearTimeout(timer);
-  }, []);
+    } else {
+      // Если данные пользователя недоступны, редирект на страницу входа
+      navigate('/login');
+    }
+  }, [userData, navigate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -115,18 +120,72 @@ const EditProfilePage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateForm() || !currentUser) {
       return;
     }
     
     setIsSaving(true);
     
-    // Имитация отправки данных на сервер
-    setTimeout(() => {
-      setIsSaving(false);
+    try {
+      let photoURL = userData?.photoURL || null;
+      
+      // Загрузка фотографии в Firebase Storage, если она была изменена
+      if (formData.avatar) {
+        try {
+          console.log('Начинаем загрузку фото...');
+          
+          // Используем простую функцию загрузки
+          photoURL = await uploadFile(
+            formData.avatar, 
+            `user-avatars/${currentUser.uid}`
+          );
+          
+          console.log('Файл успешно загружен, получен URL:', photoURL);
+        } catch (uploadError) {
+          console.error('Ошибка при загрузке файла:', uploadError);
+          alert('Произошла ошибка при загрузке фото. Пожалуйста, попробуйте позже.');
+          
+          // Продолжаем сохранять профиль с предыдущим фото
+          console.log('Продолжаем сохранение профиля с текущим фото');
+        }
+      }
+      
+      console.log('Сохраняем данные профиля в Firestore...');
+      console.log('photoURL перед сохранением:', photoURL);
+      
+      // Обновляем данные профиля в Firestore
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        displayName: formData.name,
+        email: formData.email,
+        photoURL: photoURL,
+      });
+      
+      console.log('✅ Профиль успешно сохранен в Firestore');
+      
+      // Проверяем, что URL фото действительно сохранился
+      try {
+        const updatedUserDocRef = doc(db, 'users', currentUser.uid);
+        const updatedUserDoc = await getDoc(updatedUserDocRef);
+        const updatedData = updatedUserDoc.data();
+        console.log('Данные после сохранения:', updatedData);
+        console.log('Сохраненный photoURL:', updatedData?.photoURL);
+        
+        if (photoURL && (!updatedData?.photoURL || updatedData.photoURL !== photoURL)) {
+          console.warn('⚠️ URL фото не был правильно сохранен в Firestore!');
+        }
+      } catch (verifyError) {
+        console.error('Ошибка при проверке сохраненных данных:', verifyError);
+      }
+      
       // После успешного сохранения перенаправляем на страницу профиля
       navigate('/profile');
-    }, 1500);
+    } catch (error) {
+      console.error('Ошибка при сохранении профиля:', error);
+      alert('Произошла ошибка при сохранении профиля. Пожалуйста, попробуйте снова.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {

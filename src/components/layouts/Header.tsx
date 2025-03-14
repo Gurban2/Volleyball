@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiMenu, FiX, FiCalendar, FiHome, FiUser, FiPlus } from 'react-icons/fi';
+import { FiMenu, FiX, FiCalendar, FiHome, FiUser, FiPlus, FiLogIn } from 'react-icons/fi';
+import { useAuth } from '../../contexts/AuthContext';
+import UserAvatar from '../auth/UserAvatar';
+import Button from '../ui/Button';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { currentUser, isAdmin, isOrganizer } = useAuth();
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -13,6 +17,10 @@ const Header: React.FC = () => {
 
   const closeMenu = () => {
     setIsMenuOpen(false);
+  };
+
+  const canCreateGame = () => {
+    return isAdmin() || isOrganizer();
   };
 
   return (
@@ -31,34 +39,64 @@ const Header: React.FC = () => {
               <NavItem>
                 <StyledNavLink to="/">
                   <FiHome />
-                  <span>Home</span>
+                  <span>Главная</span>
                 </StyledNavLink>
               </NavItem>
               <NavItem>
                 <StyledNavLink to="/games">
                   <FiCalendar />
-                  <span>Games</span>
+                  <span>Игры</span>
                 </StyledNavLink>
               </NavItem>
-              <NavItem>
-                <StyledNavLink to="/games/create">
-                  <FiPlus />
-                  <span>Create Game</span>
-                </StyledNavLink>
-              </NavItem>
-              <NavItem>
-                <StyledNavLink to="/profile">
-                  <FiUser />
-                  <span>Profile</span>
-                </StyledNavLink>
-              </NavItem>
+              {canCreateGame() && (
+                <NavItem>
+                  <StyledNavLink to="/games/create">
+                    <FiPlus />
+                    <span>Создать игру</span>
+                  </StyledNavLink>
+                </NavItem>
+              )}
+              {currentUser ? (
+                <NavItem>
+                  <UserAvatar />
+                </NavItem>
+              ) : (
+                <>
+                  <NavItem>
+                    <LoginButton 
+                      as={Link} 
+                      to="/login"
+                      variant="outlined"
+                      leftIcon={<FiLogIn />}
+                    >
+                      Войти
+                    </LoginButton>
+                  </NavItem>
+                  <NavItem>
+                    <RegisterButton 
+                      as={Link} 
+                      to="/register"
+                      variant="primary"
+                    >
+                      Регистрация
+                    </RegisterButton>
+                  </NavItem>
+                </>
+              )}
             </NavList>
           </DesktopNav>
 
-          {/* Mobile Menu Toggle */}
-          <MobileMenuToggle onClick={toggleMenu}>
-            {isMenuOpen ? <FiX size={24} /> : <FiMenu size={24} />}
-          </MobileMenuToggle>
+          {/* Mobile Menu Toggle and Auth */}
+          <MobileRightSection>
+            {currentUser && !isMenuOpen && (
+              <MobileAvatarWrapper>
+                <UserAvatar />
+              </MobileAvatarWrapper>
+            )}
+            <MobileMenuToggle onClick={toggleMenu}>
+              {isMenuOpen ? <FiX size={24} /> : <FiMenu size={24} />}
+            </MobileMenuToggle>
+          </MobileRightSection>
 
           {/* Mobile Navigation */}
           <AnimatePresence>
@@ -73,27 +111,44 @@ const Header: React.FC = () => {
                   <MobileNavItem>
                     <StyledMobileNavLink to="/" onClick={closeMenu}>
                       <FiHome size={20} />
-                      <span>Home</span>
+                      <span>Главная</span>
                     </StyledMobileNavLink>
                   </MobileNavItem>
                   <MobileNavItem>
                     <StyledMobileNavLink to="/games" onClick={closeMenu}>
                       <FiCalendar size={20} />
-                      <span>Games</span>
+                      <span>Игры</span>
                     </StyledMobileNavLink>
                   </MobileNavItem>
-                  <MobileNavItem>
-                    <StyledMobileNavLink to="/games/create" onClick={closeMenu}>
-                      <FiPlus size={20} />
-                      <span>Create Game</span>
-                    </StyledMobileNavLink>
-                  </MobileNavItem>
-                  <MobileNavItem>
-                    <StyledMobileNavLink to="/profile" onClick={closeMenu}>
-                      <FiUser size={20} />
-                      <span>Profile</span>
-                    </StyledMobileNavLink>
-                  </MobileNavItem>
+                  {canCreateGame() && (
+                    <MobileNavItem>
+                      <StyledMobileNavLink to="/games/create" onClick={closeMenu}>
+                        <FiPlus size={20} />
+                        <span>Создать игру</span>
+                      </StyledMobileNavLink>
+                    </MobileNavItem>
+                  )}
+                  {!currentUser && (
+                    <>
+                      <MobileNavItem>
+                        <StyledMobileNavLink to="/login" onClick={closeMenu}>
+                          <FiLogIn size={20} />
+                          <span>Войти</span>
+                        </StyledMobileNavLink>
+                      </MobileNavItem>
+                      <MobileNavAuthButton onClick={closeMenu}>
+                        <Button 
+                          as={Link} 
+                          to="/register" 
+                          variant="primary"
+                          size="medium"
+                          isFullWidth
+                        >
+                          Регистрация
+                        </Button>
+                      </MobileNavAuthButton>
+                    </>
+                  )}
                 </MobileNavList>
               </MobileNav>
             )}
@@ -171,6 +226,29 @@ const StyledNavLink = styled(NavLink)`
   }
 `;
 
+const LoginButton = styled(Button)`
+  padding: ${({ theme }) => `${theme.space.xs} ${theme.space.md}`};
+`;
+
+const RegisterButton = styled(Button)`
+  padding: ${({ theme }) => `${theme.space.xs} ${theme.space.md}`};
+`;
+
+const MobileRightSection = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.space.md};
+  
+  @media (min-width: 768px) {
+    display: none;
+  }
+`;
+
+const MobileAvatarWrapper = styled.div`
+  display: flex;
+  align-items: center;
+`;
+
 const MobileMenuToggle = styled.button`
   background: none;
   border: none;
@@ -179,10 +257,6 @@ const MobileMenuToggle = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  
-  @media (min-width: 768px) {
-    display: none;
-  }
 `;
 
 const MobileNav = styled(motion.nav)`
@@ -229,6 +303,11 @@ const StyledMobileNavLink = styled(NavLink)`
   &:last-child {
     border-bottom: none;
   }
+`;
+
+const MobileNavAuthButton = styled.div`
+  padding: ${({ theme }) => theme.space.md};
+  border-top: 1px solid ${({ theme }) => theme.colors.backgroundDark};
 `;
 
 export default Header; 

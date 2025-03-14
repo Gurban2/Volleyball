@@ -23,7 +23,7 @@ const NotFoundPage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
         >
-          Page Not Found
+          Страница не найдена
         </Title>
         <Description
           as={motion.p}
@@ -31,7 +31,7 @@ const NotFoundPage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
-          The page you are looking for doesn't exist or has been moved.
+          Страница, которую вы ищете, не существует или была перемещена.
         </Description>
         <Actions
           as={motion.div}
@@ -46,7 +46,7 @@ const NotFoundPage: React.FC = () => {
             size="large"
             leftIcon={<FiHome />}
           >
-            Back to Home
+            Вернуться на главную
           </Button>
         </Actions>
       </Content>
