@@ -4,14 +4,12 @@ import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { FiUser, FiUpload } from 'react-icons/fi';
 import Button from '../components/ui/Button';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadFile } from '../firebase/uploadHelpers';
 
 const CompleteProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser, userData } = useAuth();
+  const { currentUser, userData, refreshUserData } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<{
     nickname: string;
@@ -68,25 +66,30 @@ const CompleteProfilePage: React.FC = () => {
   };
 
   const validateForm = (): boolean => {
-    const newErrors: typeof errors = {};
+    const newErrors: {
+      nickname?: string;
+      age?: string;
+      height?: string;
+    } = {};
     
     if (!formData.nickname.trim()) {
-      newErrors.nickname = 'Ник обязателен для заполнения';
+      newErrors.nickname = 'Пожалуйста, введите никнейм';
     }
     
     if (!formData.age.trim()) {
-      newErrors.age = 'Возраст обязателен для заполнения';
-    } else if (isNaN(Number(formData.age)) || Number(formData.age) < 10 || Number(formData.age) > 100) {
-      newErrors.age = 'Введите корректный возраст (от 10 до 100 лет)';
+      newErrors.age = 'Пожалуйста, введите возраст';
+    } else if (isNaN(Number(formData.age)) || Number(formData.age) <= 0) {
+      newErrors.age = 'Возраст должен быть положительным числом';
     }
     
     if (!formData.height.trim()) {
-      newErrors.height = 'Рост обязателен для заполнения';
-    } else if (isNaN(Number(formData.height)) || Number(formData.height) < 100 || Number(formData.height) > 250) {
-      newErrors.height = 'Введите корректный рост в сантиметрах (от 100 до 250)';
+      newErrors.height = 'Пожалуйста, введите рост';
+    } else if (isNaN(Number(formData.height)) || Number(formData.height) <= 0) {
+      newErrors.height = 'Рост должен быть положительным числом';
     }
     
     setErrors(newErrors);
+    
     return Object.keys(newErrors).length === 0;
   };
 
@@ -102,306 +105,232 @@ const CompleteProfilePage: React.FC = () => {
     try {
       let photoURL = null;
       
-      // Загрузка фотографии в Firebase Storage, если она была выбрана
+      // Загрузка фотографии, если она была выбрана
       if (formData.avatar) {
         try {
-          console.log('Начинаем загрузку фото...');
+          console.log('🔄 Начинаем загрузку фото...');
           
-          // Используем простую функцию загрузки
+          // Используем функцию загрузки из uploadHelpers
           photoURL = await uploadFile(
             formData.avatar, 
             `user-avatars/${currentUser.uid}`
           );
           
-          console.log('Файл успешно загружен, получен URL:', photoURL);
+          console.log('✅ Файл успешно загружен, получен URL:', photoURL);
         } catch (uploadError) {
-          console.error('Ошибка при загрузке файла:', uploadError);
+          console.error('❌ Ошибка при загрузке файла:', uploadError);
           alert('Произошла ошибка при загрузке фото. Профиль будет создан без фотографии.');
-          
-          // Продолжаем создание профиля без фото
           photoURL = null;
         }
       }
       
-      console.log('Сохраняем данные профиля в Firestore...');
-      console.log('photoURL перед сохранением:', photoURL);
+      console.log('🔄 Сохраняем данные профиля...');
       
-      // Сохраняем данные профиля в Firestore
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        nickname: formData.nickname,
-        age: Number(formData.age),
-        height: Number(formData.height),
-        photoURL: photoURL,
-        profileCompleted: true
-      });
-      
-      console.log('✅ Профиль успешно сохранен в Firestore');
-      
-      // Проверяем, что URL фото действительно сохранился
-      try {
-        const updatedUserDocRef = doc(db, 'users', currentUser.uid);
-        const updatedUserDoc = await getDoc(updatedUserDocRef);
-        const updatedData = updatedUserDoc.data();
-        console.log('Данные после сохранения:', updatedData);
-        console.log('Сохраненный photoURL:', updatedData?.photoURL);
+      // Имитация сохранения данных в localStorage вместо Firestore
+      if (currentUser) {
+        // Создаем обновленные данные пользователя
+        const updatedUserData = {
+          ...userData,
+          nickname: formData.nickname,
+          age: Number(formData.age),
+          height: Number(formData.height),
+          photoURL: photoURL,
+          profileCompleted: true
+        };
         
-        if (photoURL && (!updatedData?.photoURL || updatedData.photoURL !== photoURL)) {
-          console.warn('⚠️ URL фото не был правильно сохранен в Firestore!');
-        }
-      } catch (verifyError) {
-        console.error('Ошибка при проверке сохраненных данных:', verifyError);
+        // Сохраняем в localStorage
+        localStorage.setItem('userData', JSON.stringify(updatedUserData));
+        
+        // Обновляем состояние пользователя
+        await refreshUserData();
+        
+        console.log('✅ Профиль успешно создан');
+        
+        // Перенаправляем на страницу профиля
+        navigate('/profile');
       }
-      
-      // После успешного сохранения перенаправляем на главную страницу
-      navigate('/');
     } catch (error) {
-      console.error('Ошибка при сохранении профиля:', error);
-      alert('Произошла ошибка при сохранении профиля. Пожалуйста, попробуйте снова.');
+      console.error('❌ Ошибка при создании профиля:', error);
+      alert('Произошла ошибка при создании профиля. Пожалуйста, попробуйте позже.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (!currentUser) {
-    return (
-      <ErrorContainer>
-        <ErrorMessage>Необходимо войти в систему</ErrorMessage>
-        <Button onClick={() => navigate('/login')} variant="primary">
-          Войти
-        </Button>
-      </ErrorContainer>
-    );
-  }
-
   return (
     <PageContainer>
-      <div className="container">
-        <PageHeader>
-          <PageTitle>Заполните свой профиль</PageTitle>
-          <PageDescription>
-            Эта информация будет доступна другим пользователям. 
-            <br />
-            <strong>Важно:</strong> эти данные нельзя будет изменить после сохранения.
-          </PageDescription>
-        </PageHeader>
-
-        <FormContainer
-          as={motion.form}
-          onSubmit={handleSubmit}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <FormSection>
-            <SectionTitle>Данные игрока</SectionTitle>
+      <PageHeader>
+        <div className="container">
+          <PageTitle>Заполните профиль</PageTitle>
+        </div>
+      </PageHeader>
+      
+      <PageContent>
+        <div className="container">
+          <FormContainer
+            as={motion.form}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            onSubmit={handleSubmit}
+          >
+            <FormSection>
+              <SectionTitle>Ваш аватар</SectionTitle>
+              <AvatarContainer>
+                <AvatarPreview>
+                  {formData.avatarPreview ? (
+                    <img src={formData.avatarPreview} alt="Аватар" />
+                  ) : (
+                    <FiUser size={48} />
+                  )}
+                </AvatarPreview>
+                <AvatarUpload>
+                  <AvatarUploadLabel htmlFor="avatar">
+                    <FiUpload />
+                    <span>Загрузить фото</span>
+                  </AvatarUploadLabel>
+                  <AvatarUploadInput 
+                    type="file" 
+                    id="avatar" 
+                    accept="image/*" 
+                    onChange={handleAvatarChange} 
+                  />
+                  <AvatarUploadHint>Рекомендуемый размер: 200x200 px</AvatarUploadHint>
+                </AvatarUpload>
+              </AvatarContainer>
+            </FormSection>
             
-            <AvatarSection>
-              <AvatarPreview>
-                {formData.avatarPreview ? (
-                  <img src={formData.avatarPreview} alt="Аватар" />
-                ) : (
-                  <FiUser size={48} />
-                )}
-              </AvatarPreview>
-              <AvatarUpload>
-                <AvatarUploadLabel htmlFor="avatar">
-                  <FiUpload />
-                  <span>Загрузить фото</span>
-                </AvatarUploadLabel>
-                <AvatarUploadInput
-                  type="file"
-                  id="avatar"
-                  accept="image/*"
-                  onChange={handleAvatarChange}
+            <FormSection>
+              <SectionTitle>Информация о вас</SectionTitle>
+              <FormGroup>
+                <FormLabel htmlFor="nickname">Ник в игре</FormLabel>
+                <FormInput
+                  type="text"
+                  id="nickname"
+                  name="nickname"
+                  value={formData.nickname}
+                  onChange={handleChange}
+                  error={!!errors.nickname}
+                  placeholder="Ваш ник"
                 />
-                <AvatarUploadHint>
-                  Рекомендуемый размер: 200x200 пикселей, JPG или PNG
-                </AvatarUploadHint>
-              </AvatarUpload>
-            </AvatarSection>
-
-            <FormGroup>
-              <FormLabel htmlFor="nickname">Никнейм</FormLabel>
-              <FormInput
-                type="text"
-                id="nickname"
-                name="nickname"
-                value={formData.nickname}
-                onChange={handleChange}
-                placeholder="Введите ваш никнейм"
-                hasError={!!errors.nickname}
-              />
-              {errors.nickname && <FormError>{errors.nickname}</FormError>}
-              <FormHint>Это имя будет отображаться другим игрокам</FormHint>
-            </FormGroup>
-
-            <FormGroup>
-              <FormLabel htmlFor="age">Возраст</FormLabel>
-              <FormInput
-                type="number"
-                id="age"
-                name="age"
-                value={formData.age}
-                onChange={handleChange}
-                placeholder="Введите ваш возраст"
-                hasError={!!errors.age}
-                min="10"
-                max="100"
-              />
-              {errors.age && <FormError>{errors.age}</FormError>}
-            </FormGroup>
-
-            <FormGroup>
-              <FormLabel htmlFor="height">Рост (см)</FormLabel>
-              <FormInput
-                type="number"
-                id="height"
-                name="height"
-                value={formData.height}
-                onChange={handleChange}
-                placeholder="Введите ваш рост в сантиметрах"
-                hasError={!!errors.height}
-                min="100"
-                max="250"
-              />
-              {errors.height && <FormError>{errors.height}</FormError>}
-            </FormGroup>
-          </FormSection>
-
-          <FormActions>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={isSaving}
-            >
-              {isSaving ? 'Сохранение...' : 'Сохранить профиль'}
-            </Button>
-          </FormActions>
-        </FormContainer>
-      </div>
+                {errors.nickname && <ErrorMessage>{errors.nickname}</ErrorMessage>}
+              </FormGroup>
+              
+              <FormRow>
+                <FormGroup>
+                  <FormLabel htmlFor="age">Возраст</FormLabel>
+                  <FormInput
+                    type="number"
+                    id="age"
+                    name="age"
+                    value={formData.age}
+                    onChange={handleChange}
+                    error={!!errors.age}
+                    min="1"
+                    placeholder="Ваш возраст"
+                  />
+                  {errors.age && <ErrorMessage>{errors.age}</ErrorMessage>}
+                </FormGroup>
+                
+                <FormGroup>
+                  <FormLabel htmlFor="height">Рост (см)</FormLabel>
+                  <FormInput
+                    type="number"
+                    id="height"
+                    name="height"
+                    value={formData.height}
+                    onChange={handleChange}
+                    error={!!errors.height}
+                    min="1"
+                    placeholder="Ваш рост в см"
+                  />
+                  {errors.height && <ErrorMessage>{errors.height}</ErrorMessage>}
+                </FormGroup>
+              </FormRow>
+            </FormSection>
+            
+            <FormActions>
+              <SubmitButton 
+                type="submit" 
+                loading={isSaving}
+              >
+                Сохранить профиль
+              </SubmitButton>
+            </FormActions>
+          </FormContainer>
+        </div>
+      </PageContent>
     </PageContainer>
   );
 };
 
-// Стили компонентов
+// Styled Components
 const PageContainer = styled.div`
-  padding-bottom: 2rem;
+  min-height: 100vh;
+  background-color: ${({ theme }) => theme.colors.background};
 `;
 
-const PageHeader = styled.div`
-  margin-bottom: 2rem;
+const PageHeader = styled.header`
+  background-color: ${({ theme }) => theme.colors.primary};
+  color: white;
+  padding: ${({ theme }) => theme.space.lg} 0;
   text-align: center;
 `;
 
 const PageTitle = styled.h1`
-  font-size: 2rem;
-  font-weight: 700;
-  color: #333;
-  margin-bottom: 0.5rem;
+  font-size: ${({ theme }) => theme.fontSizes.xl};
+  font-weight: ${({ theme }) => theme.fontWeights.bold};
 `;
 
-const PageDescription = styled.p`
-  color: #666;
-  margin-bottom: 1.5rem;
+const PageContent = styled.main`
+  padding: ${({ theme }) => theme.space.xl} 0;
 `;
 
 const FormContainer = styled.form`
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   max-width: 600px;
   margin: 0 auto;
+  background-color: white;
+  border-radius: ${({ theme }) => theme.radii.lg};
+  box-shadow: ${({ theme }) => theme.shadows.md};
   overflow: hidden;
 `;
 
-const FormSection = styled.div`
-  padding: 1.5rem;
-  border-bottom: 1px solid #eee;
-`;
-
-const SectionTitle = styled.h2`
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 1.5rem;
-`;
-
-const FormGroup = styled.div`
-  margin-bottom: 1.5rem;
-`;
-
-const FormLabel = styled.label`
-  display: block;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  color: #444;
-`;
-
-const FormInput = styled.input<{ hasError?: boolean }>`
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid ${props => props.hasError ? '#e53e3e' : '#ddd'};
-  border-radius: 4px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
+const FormSection = styled.section`
+  padding: ${({ theme }) => theme.space.lg};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
   
-  &:focus {
-    outline: none;
-    border-color: ${props => props.hasError ? '#e53e3e' : '#3182ce'};
+  &:last-child {
+    border-bottom: none;
   }
 `;
 
-const FormError = styled.div`
-  color: #e53e3e;
-  font-size: 0.875rem;
-  margin-top: 0.5rem;
+const SectionTitle = styled.h2`
+  font-size: ${({ theme }) => theme.fontSizes.lg};
+  font-weight: ${({ theme }) => theme.fontWeights.bold};
+  margin-bottom: ${({ theme }) => theme.space.md};
+  color: ${({ theme }) => theme.colors.textPrimary};
 `;
 
-const FormHint = styled.div`
-  color: #666;
-  font-size: 0.875rem;
-  margin-top: 0.5rem;
-`;
-
-const FormActions = styled.div`
-  padding: 1.5rem;
-  display: flex;
-  justify-content: flex-end;
-`;
-
-const ErrorContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 50vh;
-  text-align: center;
-  gap: 1.5rem;
-`;
-
-const ErrorMessage = styled.div`
-  color: #e53e3e;
-  font-size: 1.25rem;
-  font-weight: 500;
-`;
-
-const AvatarSection = styled.div`
+const AvatarContainer = styled.div`
   display: flex;
   align-items: center;
-  margin-bottom: 1.5rem;
+  gap: ${({ theme }) => theme.space.lg};
+  
+  @media (max-width: 480px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 `;
 
 const AvatarPreview = styled.div`
   width: 100px;
   height: 100px;
-  border-radius: 50%;
-  background-color: #f0f0f0;
+  border-radius: ${({ theme }) => theme.radii.round};
+  background-color: ${({ theme }) => theme.colors.backgroundDark};
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #666;
-  margin-right: 1.5rem;
+  color: ${({ theme }) => theme.colors.textSecondary};
   overflow: hidden;
   
   img {
@@ -412,53 +341,104 @@ const AvatarPreview = styled.div`
 `;
 
 const AvatarUpload = styled.div`
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.space.xs};
 `;
 
 const AvatarUploadLabel = styled.label`
   display: inline-flex;
   align-items: center;
-  background-color: #f0f0f0;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
+  gap: ${({ theme }) => theme.space.xs};
+  padding: ${({ theme }) => theme.space.sm} ${({ theme }) => theme.space.md};
+  background-color: ${({ theme }) => theme.colors.primary};
+  color: white;
+  border-radius: ${({ theme }) => theme.radii.md};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: ${({ theme }) => theme.transitions.default};
   
   &:hover {
-    background-color: #e0e0e0;
-  }
-  
-  svg {
-    margin-right: 0.5rem;
+    background-color: ${({ theme }) => theme.colors.primaryDark};
   }
 `;
 
 const AvatarUploadInput = styled.input`
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+  display: none;
 `;
 
-const AvatarUploadHint = styled.div`
-  color: #666;
-  font-size: 0.75rem;
-  margin-top: 0.5rem;
+const AvatarUploadHint = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
-const LoadingContainer = styled.div`
+const FormGroup = styled.div`
+  margin-bottom: ${({ theme }) => theme.space.md};
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const FormRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${({ theme }) => theme.space.md};
+  
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const FormLabel = styled.label`
+  display: block;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  color: ${({ theme }) => theme.colors.textPrimary};
+  margin-bottom: ${({ theme }) => theme.space.xs};
+`;
+
+interface FormInputProps {
+  error?: boolean;
+}
+
+const FormInput = styled.input<FormInputProps>`
+  width: 100%;
+  padding: ${({ theme }) => theme.space.md};
+  border: 1px solid ${({ theme, error }) => 
+    error ? theme.colors.danger : theme.colors.border};
+  border-radius: ${({ theme }) => theme.radii.md};
+  font-size: ${({ theme }) => theme.fontSizes.md};
+  
+  &:focus {
+    outline: none;
+    border-color: ${({ theme, error }) => 
+      error ? theme.colors.danger : theme.colors.primary};
+    box-shadow: 0 0 0 2px ${({ theme, error }) => 
+      error ? `${theme.colors.danger}25` : `${theme.colors.primary}25`};
+  }
+`;
+
+const ErrorMessage = styled.p`
+  color: ${({ theme }) => theme.colors.danger};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  margin-top: ${({ theme }) => theme.space.xs};
+`;
+
+const FormActions = styled.div`
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  height: 50vh;
-  text-align: center;
-  gap: 1rem;
+  padding: ${({ theme }) => theme.space.lg};
+  background-color: ${({ theme }) => theme.colors.backgroundLight};
+  border-top: 1px solid ${({ theme }) => theme.colors.border};
 `;
 
-const LoadingText = styled.div`
-  color: #666;
-  font-size: 1rem;
+interface SubmitButtonProps {
+  loading?: boolean;
+}
+
+const SubmitButton = styled(Button)<SubmitButtonProps>`
+  min-width: 200px;
 `;
 
 export default CompleteProfilePage; 

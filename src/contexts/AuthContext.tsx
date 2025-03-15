@@ -1,14 +1,12 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import {
-  User,
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged,
-  updateProfile
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase/config';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+
+// Определяем интерфейс пользователя (без Firebase)
+interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
 
 // Определяем интерфейс для пользовательских данных, включая роли
 interface UserData {
@@ -35,6 +33,7 @@ interface AuthContextProps {
   isAdmin: () => boolean;
   isOrganizer: () => boolean;
   authError: string | null;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -51,160 +50,194 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Мокнутые данные пользователя для разработки
+const MOCK_USER: User = {
+  uid: 'mock-user-123',
+  email: 'user@example.com',
+  displayName: 'Тестовый Пользователь',
+  photoURL: 'https://via.placeholder.com/150'
+};
+
+const MOCK_ADMIN_USER: User = {
+  uid: 'mock-admin-123',
+  email: 'admin@example.com',
+  displayName: 'Администратор',
+  photoURL: 'https://via.placeholder.com/150'
+};
+
+const MOCK_ORGANIZER_USER: User = {
+  uid: 'mock-organizer-123',
+  email: 'organizer@example.com',
+  displayName: 'Организатор',
+  photoURL: 'https://via.placeholder.com/150'
+};
+
+// Мокнутые данные пользователя
+const MOCK_USER_DATA: UserData = {
+  uid: MOCK_USER.uid,
+  email: MOCK_USER.email,
+  displayName: MOCK_USER.displayName,
+  role: 'user',
+  photoURL: MOCK_USER.photoURL,
+  profileCompleted: true,
+  nickname: 'Volleyball_Player',
+  age: 25,
+  height: 180
+};
+
+// Мокнутые данные администратора
+const MOCK_ADMIN_DATA: UserData = {
+  uid: MOCK_ADMIN_USER.uid,
+  email: MOCK_ADMIN_USER.email,
+  displayName: MOCK_ADMIN_USER.displayName,
+  role: 'admin',
+  photoURL: MOCK_ADMIN_USER.photoURL,
+  profileCompleted: true
+};
+
+// Мокнутые данные организатора
+const MOCK_ORGANIZER_DATA: UserData = {
+  uid: MOCK_ORGANIZER_USER.uid,
+  email: MOCK_ORGANIZER_USER.email,
+  displayName: MOCK_ORGANIZER_USER.displayName,
+  role: 'organizer',
+  photoURL: MOCK_ORGANIZER_USER.photoURL,
+  profileCompleted: true
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Регистрация нового пользователя
+  // Заглушка для обновления данных пользователя
+  const refreshUserData = async () => {
+    console.log('🔄 Обновление данных пользователя (локальные данные)');
+    // В этой заглушке ничего не делаем, просто возвращаем успешный результат
+    return;
+  };
+
+  // Заглушка для регистрации
   const register = async (email: string, password: string, displayName: string) => {
-    try {
-      console.log('Начинаем регистрацию пользователя:', email);
-      // Регистрация пользователя
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      console.log('Пользователь зарегистрирован, обновляем профиль:', displayName);
-      // Обновление профиля пользователя
-      await updateProfile(user, { displayName });
+    console.log('🔄 Регистрация нового пользователя (локальные данные)');
+    setAuthError(null);
 
-      console.log('Создаем документ пользователя в Firestore');
-      // Создание документа пользователя в Firestore с расширенными полями
-      await setDoc(doc(db, "users", user.uid), {
-        email,
-        displayName,
-        role: "user", // По умолчанию обычный пользователь
-        createdAt: serverTimestamp(),
-        // Поля, которые будут заполнены позже и не могут быть изменены
-        height: null,
-        age: null,
-        nickname: null,
-        photoURL: null,
-        profileCompleted: false // Флаг, указывающий, заполнил ли пользователь обязательные поля профиля
-      });
-      
-      console.log('Пользователь успешно зарегистрирован и данные сохранены в Firestore');
-      return user;
-    } catch (error: any) {
-      console.error("Ошибка при регистрации:", error);
-      setAuthError(`Ошибка при регистрации: ${error.message || 'Неизвестная ошибка'}`);
-      throw error;
-    }
+    // Эмулируем процесс регистрации
+    setLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Имитация задержки
+
+    // Создаем нового пользователя
+    const newUser: User = {
+      uid: `user-${Date.now()}`,
+      email: email,
+      displayName: displayName,
+      photoURL: null
+    };
+
+    // Создаем данные пользователя
+    const newUserData: UserData = {
+      uid: newUser.uid,
+      email: newUser.email,
+      displayName: newUser.displayName,
+      role: 'user',
+      photoURL: null,
+      profileCompleted: false,
+      createdAt: new Date().toISOString()
+    };
+
+    // Сохраняем в локальном хранилище
+    localStorage.setItem('currentUser', JSON.stringify(newUser));
+    localStorage.setItem('userData', JSON.stringify(newUserData));
+    
+    // Устанавливаем состояние
+    setCurrentUser(newUser);
+    setUserData(newUserData);
+    setLoading(false);
+
+    return newUser;
   };
 
-  // Вход в систему
+  // Заглушка для входа
   const login = async (email: string, password: string) => {
-    try {
-      console.log('Выполняем вход пользователя:', email);
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('Пользователь успешно вошел в систему');
-      return userCredential.user;
-    } catch (error: any) {
-      console.error("Ошибка при входе:", error);
-      setAuthError(`Ошибка при входе: ${error.message || 'Неизвестная ошибка'}`);
-      throw error;
+    console.log('🔄 Вход пользователя (локальные данные)');
+    setAuthError(null);
+
+    setLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Имитация задержки
+    
+    // В зависимости от email выбираем тип пользователя
+    let user: User;
+    let userDataMock: UserData;
+    
+    if (email === 'admin@example.com') {
+      user = MOCK_ADMIN_USER;
+      userDataMock = MOCK_ADMIN_DATA;
+    } else if (email === 'organizer@example.com') {
+      user = MOCK_ORGANIZER_USER;
+      userDataMock = MOCK_ORGANIZER_DATA;
+    } else {
+      user = MOCK_USER;
+      userDataMock = MOCK_USER_DATA;
     }
+    
+    // Сохраняем в локальном хранилище
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    localStorage.setItem('userData', JSON.stringify(userDataMock));
+    
+    setCurrentUser(user);
+    setUserData(userDataMock);
+    setLoading(false);
+    
+    return user;
   };
 
-  // Выход из системы
+  // Заглушка для выхода
   const logout = async () => {
-    try {
-      console.log('Выполняем выход из системы');
-      await signOut(auth);
-      console.log('Пользователь успешно вышел из системы');
-    } catch (error: any) {
-      console.error('Error during logout:', error);
-      setAuthError(`Ошибка при выходе: ${error.message || 'Неизвестная ошибка'}`);
-      throw error;
-    }
+    console.log('🔄 Выход пользователя (локальные данные)');
+    setLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 500)); // Имитация задержки
+    
+    // Очищаем локальное хранилище
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('userData');
+    
+    // Очищаем данные пользователя
+    setCurrentUser(null);
+    setUserData(null);
+    setLoading(false);
   };
 
-  // Проверяем, является ли пользователь администратором
-  const isAdmin = () => {
-    if (!userData) return false;
-    return userData.role === 'admin' && userData.profileCompleted === true;
-  };
-
-  // Проверяем, является ли пользователь организатором
-  const isOrganizer = () => {
-    if (!userData) return false;
-    return (userData.role === 'organizer' || userData.role === 'admin') && userData.profileCompleted === true;
-  };
-
-  // Наблюдаем за изменениями состояния аутентификации
+  // Загрузка сохраненных данных при инициализации
   useEffect(() => {
-    console.log('🔄 Инициализация AuthContext...');
-    console.log('Auth object:', auth);
-    console.log('DB object:', db);
+    console.log('🔄 Инициализация AuthContext (локальные данные)');
     
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('👤 Изменение состояния аутентификации:', user ? `Пользователь: ${user.email}` : 'Не авторизован');
-      setCurrentUser(user);
-      
-      if (user) {
-        try {
-          console.log('📚 Получаем данные пользователя из Firestore для:', user.uid);
-          // Получаем данные пользователя из Firestore
-          const docRef = doc(db, 'users', user.uid);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-            console.log('✅ Данные пользователя найдены в Firestore');
-            const userDataFromFirestore = docSnap.data() as UserData;
-            console.log('📋 Данные пользователя:', userDataFromFirestore);
-            setUserData(userDataFromFirestore);
-            
-            // Проверка, требуется ли заполнение профиля и перенаправление
-            if (window.location.pathname !== '/profile/complete' && 
-                userDataFromFirestore.profileCompleted === false && 
-                window.location.pathname !== '/login' && 
-                window.location.pathname !== '/register') {
-              console.log('🔄 Перенаправление на страницу заполнения профиля');
-              window.location.href = '/profile/complete';
-            }
-          } else {
-            console.log('❌ Документ пользователя не найден, создаем базовый');
-            // Если документ не существует, создаем базовый
-            const newUserData: UserData = {
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              role: 'user',
-              photoURL: user.photoURL,
-              profileCompleted: false
-            };
-            
-            console.log('📝 Сохраняем базовые данные пользователя:', newUserData);
-            await setDoc(docRef, newUserData);
-            setUserData(newUserData);
-            
-            // Перенаправляем на страницу заполнения профиля
-            if (window.location.pathname !== '/profile/complete' && 
-                window.location.pathname !== '/login' && 
-                window.location.pathname !== '/register') {
-              console.log('🔄 Перенаправление на страницу заполнения профиля');
-              window.location.href = '/profile/complete';
-            }
-          }
-        } catch (error: any) {
-          console.error('❌ Ошибка при получении данных пользователя:', error);
-          setAuthError(`Ошибка при получении данных: ${error.message || 'Неизвестная ошибка'}`);
-        }
-      } else {
-        console.log('👤 Пользователь не авторизован, очищаем userData');
-        setUserData(null);
-      }
-      
-      console.log('🏁 Загрузка завершена, установка loading = false');
-      setLoading(false);
-    });
+    // Восстанавливаем сохраненную сессию из localStorage, если она есть
+    const savedUser = localStorage.getItem('currentUser');
+    const savedUserData = localStorage.getItem('userData');
     
-    console.log('🔄 AuthContext инициализирован');
-    return unsubscribe;
+    if (savedUser && savedUserData) {
+      setCurrentUser(JSON.parse(savedUser));
+      setUserData(JSON.parse(savedUserData));
+      console.log('✅ Восстановлена сохраненная сессия');
+    } else {
+      console.log('ℹ️ Сохраненная сессия не найдена');
+    }
+    
+    setLoading(false);
   }, []);
 
-  const value = {
+  // Проверка на роль администратора
+  const isAdmin = () => {
+    return userData?.role === 'admin';
+  };
+
+  // Проверка на роль организатора
+  const isOrganizer = () => {
+    return userData?.role === 'organizer' || userData?.role === 'admin';
+  };
+
+  const value: AuthContextProps = {
     currentUser,
     userData,
     loading,
@@ -213,7 +246,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     isAdmin,
     isOrganizer,
-    authError
+    authError,
+    refreshUserData
   };
 
   return (

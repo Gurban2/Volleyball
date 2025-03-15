@@ -17,7 +17,6 @@ import CompleteProfilePage from './pages/CompleteProfilePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
-import DiagnosticPage from './pages/DiagnosticPage';
 
 // Auth
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -36,7 +35,6 @@ function App() {
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
           <Route path="access-denied" element={<AccessDeniedPage />} />
-          <Route path="diagnostic" element={<DiagnosticPage />} />
           
           {/* Маршруты для авторизованных пользователей */}
           <Route element={<ProtectedRoute />}>

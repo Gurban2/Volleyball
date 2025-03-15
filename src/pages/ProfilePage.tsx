@@ -6,7 +6,6 @@ import { FiUser, FiMail, FiPhone, FiEdit, FiCalendar, FiMapPin, FiClock } from '
 import Button from '../components/ui/Button';
 import { GameCardProps } from '../components/ui/GameCard';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
@@ -31,78 +30,85 @@ const ProfilePage: React.FC = () => {
     gamesParticipated: 0,
     upcomingGames: 0
   });
-  const [createdGames, setCreatedGames] = useState<GameCardProps[]>([]);
-  const [bookedGames, setBookedGames] = useState<GameCardProps[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'created' | 'booked'>('created');
-
-  // Загрузка данных из Firestore
+  
+  const [upcomingGames, setUpcomingGames] = useState<GameCardProps[]>([]);
+  const [pastGames, setPastGames] = useState<GameCardProps[]>([]);
+  const [loading, setLoading] = useState(true);
+  
   useEffect(() => {
-    if (!currentUser) return;
-    
-    const fetchUserGames = async () => {
-      setIsLoading(true);
-      try {
-        // Поиск игр, созданных пользователем
-        const createdGamesQuery = query(
-          collection(db, 'games'),
-          where('creatorId', '==', currentUser.uid)
-        );
-        const createdGamesSnapshot = await getDocs(createdGamesQuery);
-        const createdGamesData = createdGamesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as GameCardProps[];
-        
-        // Поиск игр, в которых пользователь участвует
-        const bookedGamesQuery = query(
-          collection(db, 'gameParticipants'),
-          where('userId', '==', currentUser.uid)
-        );
-        const bookedGamesSnapshot = await getDocs(bookedGamesQuery);
-        const gameIds = bookedGamesSnapshot.docs.map(doc => doc.data().gameId);
-        
-        // Если пользователь участвует в играх, получаем данные этих игр
-        let bookedGamesData: GameCardProps[] = [];
-        if (gameIds.length > 0) {
-          // Для простоты, можно использовать несколько запросов
-          // В реальном приложении лучше использовать батчинг или другую оптимизацию
-          for (const gameId of gameIds) {
-            const gameQuery = query(
-              collection(db, 'games'),
-              where('id', '==', gameId)
-            );
-            const gameSnapshot = await getDocs(gameQuery);
-            if (!gameSnapshot.empty) {
-              bookedGamesData.push({
-                id: gameSnapshot.docs[0].id,
-                ...gameSnapshot.docs[0].data()
-              } as GameCardProps);
-            }
-          }
+    if (currentUser && userData) {
+      fetchUserGames();
+    } else {
+      setLoading(false);
+    }
+  }, [currentUser, userData]);
+  
+  // Заменяем на локальную заглушку вместо запросов к Firestore
+  const fetchUserGames = async () => {
+    try {
+      console.log(`🔄 Симуляция запроса игр пользователя ${currentUser?.uid}`);
+      
+      // Имитация задержки загрузки
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Моковые данные для отображения
+      const mockUpcomingGames: GameCardProps[] = [
+        {
+          id: '1',
+          title: 'Пляжный волейбол',
+          location: 'Пляж "Ривьера"',
+          date: '2025-06-15',
+          time: '17:00',
+          format: 'friendly',
+          spotsTotal: 16,
+          spotsTaken: 12,
+          imageUrl: 'https://via.placeholder.com/800x450?text=Пляжный+волейбол'
+        },
+        {
+          id: '2',
+          title: 'Волейбольный турнир',
+          location: 'Спортивный комплекс',
+          date: '2025-06-25',
+          time: '10:00',
+          format: 'tournament',
+          spotsTotal: 24,
+          spotsTaken: 16,
+          imageUrl: 'https://via.placeholder.com/800x450?text=Волейбольный+турнир'
         }
-        
-        // Обновляем состояние
-        setCreatedGames(createdGamesData);
-        setBookedGames(bookedGamesData);
-        setStats({
-          gamesCreated: createdGamesData.length,
-          gamesParticipated: bookedGamesData.length,
-          upcomingGames: [...createdGamesData, ...bookedGamesData].filter(
-            game => new Date(game.date) > new Date()
-          ).length
-        });
-      } catch (error) {
-        console.error('Ошибка при загрузке игр:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchUserGames();
-  }, [currentUser]);
+      ];
+      
+      const mockPastGames: GameCardProps[] = [
+        {
+          id: '3',
+          title: 'Товарищеский матч',
+          location: 'Волейбольный центр',
+          date: '2023-05-10',
+          time: '18:30',
+          format: 'friendly',
+          spotsTotal: 12,
+          spotsTaken: 12,
+          imageUrl: 'https://via.placeholder.com/800x450?text=Товарищеский+матч'
+        }
+      ];
+      
+      setUpcomingGames(mockUpcomingGames);
+      setPastGames(mockPastGames);
+      
+      // Обновляем статистику
+      setStats({
+        gamesCreated: 3,
+        gamesParticipated: 8,
+        upcomingGames: mockUpcomingGames.length
+      });
+      
+      setLoading(false);
+    } catch (error) {
+      console.error("❌ Ошибка при получении игр пользователя:", error);
+      setLoading(false);
+    }
+  };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <LoadingContainer>
         <LoadingSpinner />
@@ -190,74 +196,20 @@ const ProfilePage: React.FC = () => {
           >
             <TabsContainer>
               <Tab
-                isActive={activeTab === 'created'}
-                onClick={() => setActiveTab('created')}
+                isActive={true}
               >
                 Созданные игры
               </Tab>
               <Tab
-                isActive={activeTab === 'booked'}
-                onClick={() => setActiveTab('booked')}
+                isActive={false}
               >
                 Мои записи
               </Tab>
             </TabsContainer>
 
             <GamesContainer>
-              {activeTab === 'created' ? (
-                createdGames.length > 0 ? (
-                  createdGames.map((game) => (
-                    <GameItem key={game.id}>
-                      <GameImage src={game.imageUrl || '/images/default-game.jpg'} alt={game.title} />
-                      <GameContent>
-                        <GameTitle>{game.title}</GameTitle>
-                        <GameMeta>
-                          <GameMetaItem>
-                            <FiCalendar />
-                            <span>{game.date}</span>
-                          </GameMetaItem>
-                          <GameMetaItem>
-                            <FiClock />
-                            <span>{game.time}</span>
-                          </GameMetaItem>
-                          <GameMetaItem>
-                            <FiMapPin />
-                            <span>{game.location}</span>
-                          </GameMetaItem>
-                        </GameMeta>
-                        <GameActions>
-                          <Button
-                            as={Link}
-                            to={`/games/${game.id}`}
-                            variant="outlined"
-                            size="small"
-                          >
-                            Подробнее
-                          </Button>
-                          <Button
-                            as={Link}
-                            to={`/games/${game.id}/edit`}
-                            variant="primary"
-                            size="small"
-                          >
-                            Редактировать
-                          </Button>
-                        </GameActions>
-                      </GameContent>
-                    </GameItem>
-                  ))
-                ) : (
-                  <EmptyState>
-                    <EmptyStateText>У вас нет созданных игр</EmptyStateText>
-                    {userData.role === 'organizer' || userData.role === 'admin' ? (
-                      <Button as={Link} to="/games/create" variant="primary">
-                        Создать игру
-                      </Button>
-                    ) : null}
-                  </EmptyState>
-                )
-              ) : bookedGames.length > 0 ? (
-                bookedGames.map((game) => (
+              {upcomingGames.length > 0 ? (
+                upcomingGames.map((game) => (
                   <GameItem key={game.id}>
                     <GameImage src={game.imageUrl || '/images/default-game.jpg'} alt={game.title} />
                     <GameContent>
@@ -280,10 +232,18 @@ const ProfilePage: React.FC = () => {
                         <Button
                           as={Link}
                           to={`/games/${game.id}`}
-                          variant="primary"
+                          variant="outlined"
                           size="small"
                         >
                           Подробнее
+                        </Button>
+                        <Button
+                          as={Link}
+                          to={`/games/${game.id}/edit`}
+                          variant="primary"
+                          size="small"
+                        >
+                          Редактировать
                         </Button>
                       </GameActions>
                     </GameContent>
@@ -291,10 +251,12 @@ const ProfilePage: React.FC = () => {
                 ))
               ) : (
                 <EmptyState>
-                  <EmptyStateText>Вы не записаны на участие в играх</EmptyStateText>
-                  <Button as={Link} to="/games" variant="primary">
-                    Найти игры
-                  </Button>
+                  <EmptyStateText>У вас нет созданных игр</EmptyStateText>
+                  {userData.role === 'organizer' || userData.role === 'admin' ? (
+                    <Button as={Link} to="/games/create" variant="primary">
+                      Создать игру
+                    </Button>
+                  ) : null}
                 </EmptyState>
               )}
             </GamesContainer>

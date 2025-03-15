@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiLogIn, FiAlertCircle } from 'react-icons/fi';
+import { FiLogIn, FiAlertCircle, FiInfo } from 'react-icons/fi';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,7 +15,9 @@ const LoginPage: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(
+    "ВНИМАНИЕ: Firebase отключен! Используйте email: admin@example.com для входа как админ, organizer@example.com для входа как организатор, или любой другой email для обычного пользователя."
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -51,6 +53,13 @@ const LoginPage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
+          {infoMessage && (
+            <InfoMessage>
+              <FiInfo />
+              <span>{infoMessage}</span>
+            </InfoMessage>
+          )}
+          
           {error && (
             <ErrorMessage>
               <FiAlertCircle />
@@ -99,49 +108,6 @@ const LoginPage: React.FC = () => {
               <Link to="/register">Зарегистрироваться</Link>
             </p>
           </FormFooter>
-          
-          <DebugSection>
-            <DebugButton 
-              type="button" 
-              onClick={() => setShowDebugInfo(!showDebugInfo)}
-            >
-              {showDebugInfo ? 'Скрыть отладочную информацию' : 'Показать отладочную информацию'}
-            </DebugButton>
-            
-            {showDebugInfo && (
-              <DebugInfo>
-                <h4>Отладочная информация:</h4>
-                <p>Firebase authError: {authError || 'нет ошибок'}</p>
-                <p>Локальная ошибка: {error || 'нет ошибок'}</p>
-                <p>Текущий путь: {window.location.pathname}</p>
-                <p>Firebase конфигурация: {window.localStorage.getItem('firebase-debug-mode') || 'не установлена'}</p>
-                <p>Кэш Firebase auth: {localStorage.getItem('firebase:authUser:AIzaSyAHpnRMDWPYKQSHKfxNep_WW9-fksYE1vk:[DEFAULT]') ? 'имеется' : 'отсутствует'}</p>
-                
-                <h4>Действия:</h4>
-                <DebugButton 
-                  type="button" 
-                  onClick={() => {
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    console.log('Локальное хранилище очищено');
-                    window.location.reload();
-                  }}
-                >
-                  Очистить хранилище и перезагрузить
-                </DebugButton>
-                
-                <DebugButton 
-                  type="button" 
-                  onClick={() => {
-                    localStorage.setItem('firebase-debug-mode', 'enabled');
-                    console.log('Режим отладки Firebase включен');
-                  }}
-                >
-                  Включить режим отладки Firebase
-                </DebugButton>
-              </DebugInfo>
-            )}
-          </DebugSection>
         </FormContainer>
       </div>
     </PageContainer>
@@ -221,6 +187,21 @@ const ErrorMessage = styled.div`
   }
 `;
 
+const InfoMessage = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.space.xs};
+  padding: ${({ theme }) => theme.space.md};
+  border-radius: ${({ theme }) => theme.radii.md};
+  background-color: ${({ theme }) => theme.colors.infoLight};
+  color: ${({ theme }) => theme.colors.info};
+  margin-bottom: ${({ theme }) => theme.space.lg};
+  
+  svg {
+    min-width: 18px;
+  }
+`;
+
 const FormFooter = styled.div`
   margin-top: ${({ theme }) => theme.space.lg};
   text-align: center;
@@ -234,48 +215,6 @@ const FormFooter = styled.div`
     &:hover {
       text-decoration: underline;
     }
-  }
-`;
-
-const DebugSection = styled.div`
-  margin-top: ${({ theme }) => theme.space.xl};
-  padding-top: ${({ theme }) => theme.space.md};
-  border-top: 1px dashed ${({ theme }) => theme.colors.border};
-`;
-
-const DebugButton = styled.button`
-  background: transparent;
-  border: 1px dashed ${({ theme }) => theme.colors.border};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  padding: ${({ theme }) => theme.space.xs} ${({ theme }) => theme.space.sm};
-  border-radius: ${({ theme }) => theme.radii.sm};
-  font-size: ${({ theme }) => theme.fontSizes.xs};
-  cursor: pointer;
-  margin-top: ${({ theme }) => theme.space.xs};
-  margin-bottom: ${({ theme }) => theme.space.xs};
-  
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.backgroundDark};
-  }
-`;
-
-const DebugInfo = styled.div`
-  margin-top: ${({ theme }) => theme.space.md};
-  padding: ${({ theme }) => theme.space.md};
-  background-color: ${({ theme }) => theme.colors.backgroundDark};
-  border-radius: ${({ theme }) => theme.radii.md};
-  font-size: ${({ theme }) => theme.fontSizes.xs};
-  line-height: 1.5;
-  
-  h4 {
-    font-weight: ${({ theme }) => theme.fontWeights.medium};
-    margin-bottom: ${({ theme }) => theme.space.xs};
-    color: ${({ theme }) => theme.colors.textSecondary};
-  }
-  
-  p {
-    margin-bottom: ${({ theme }) => theme.space.xs};
-    word-break: break-all;
   }
 `;
 

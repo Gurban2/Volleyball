@@ -2,12 +2,17 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiUser, FiArrowLeft, FiUpload } from 'react-icons/fi';
+import { FiUser, FiArrowLeft, FiUpload, FiShield, FiWifi, FiWifiOff, FiAlertTriangle } from 'react-icons/fi';
 import Button from '../components/ui/Button';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadFile } from '../firebase/uploadHelpers';
+import { 
+  checkFirestoreConnection, 
+  toggleNetworkMode, 
+  forceOnline, 
+  isNetworkOnline 
+} from '../firebase/config';
 
 interface UserProfile {
   id: string;
@@ -28,9 +33,11 @@ const MOCK_USER_PROFILE: UserProfile = {
 
 const EditProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser, userData } = useAuth();
+  const { currentUser, userData, refreshUserData } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [formData, setFormData] = useState<{
     name: string;
     email: string;
@@ -68,6 +75,22 @@ const EditProfilePage: React.FC = () => {
       navigate('/login');
     }
   }, [userData, navigate]);
+
+  // При загрузке проверим состояние сети
+  useEffect(() => {
+    const checkNetworkStatus = async () => {
+      try {
+        const connectionStatus = await checkFirestoreConnection();
+        setIsOnline(connectionStatus);
+        console.log('Начальный статус сети:', connectionStatus ? 'онлайн' : 'офлайн');
+      } catch (error) {
+        console.error('Ошибка при проверке статуса сети:', error);
+        setIsOnline(false);
+      }
+    };
+    
+    checkNetworkStatus();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -132,17 +155,17 @@ const EditProfilePage: React.FC = () => {
       // Загрузка фотографии в Firebase Storage, если она была изменена
       if (formData.avatar) {
         try {
-          console.log('Начинаем загрузку фото...');
+          console.log('🔄 Начинаем загрузку фото...');
           
-          // Используем простую функцию загрузки
+          // Используем функцию загрузки из uploadHelpers
           photoURL = await uploadFile(
             formData.avatar, 
             `user-avatars/${currentUser.uid}`
           );
           
-          console.log('Файл успешно загружен, получен URL:', photoURL);
+          console.log('✅ Файл успешно загружен, получен URL:', photoURL);
         } catch (uploadError) {
-          console.error('Ошибка при загрузке файла:', uploadError);
+          console.error('❌ Ошибка при загрузке файла:', uploadError);
           alert('Произошла ошибка при загрузке фото. Пожалуйста, попробуйте позже.');
           
           // Продолжаем сохранять профиль с предыдущим фото
@@ -150,39 +173,33 @@ const EditProfilePage: React.FC = () => {
         }
       }
       
-      console.log('Сохраняем данные профиля в Firestore...');
-      console.log('photoURL перед сохранением:', photoURL);
+      console.log('🔄 Сохраняем данные профиля...');
       
-      // Обновляем данные профиля в Firestore
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
+      // Создаем объект с новыми данными
+      const updatedUserData = {
+        ...userData,
         displayName: formData.name,
         email: formData.email,
-        photoURL: photoURL,
-      });
+        photoURL: photoURL
+      };
       
-      console.log('✅ Профиль успешно сохранен в Firestore');
+      // Сохраняем в localStorage
+      localStorage.setItem('userData', JSON.stringify(updatedUserData));
       
-      // Проверяем, что URL фото действительно сохранился
-      try {
-        const updatedUserDocRef = doc(db, 'users', currentUser.uid);
-        const updatedUserDoc = await getDoc(updatedUserDocRef);
-        const updatedData = updatedUserDoc.data();
-        console.log('Данные после сохранения:', updatedData);
-        console.log('Сохраненный photoURL:', updatedData?.photoURL);
-        
-        if (photoURL && (!updatedData?.photoURL || updatedData.photoURL !== photoURL)) {
-          console.warn('⚠️ URL фото не был правильно сохранен в Firestore!');
-        }
-      } catch (verifyError) {
-        console.error('Ошибка при проверке сохраненных данных:', verifyError);
-      }
+      // Обновляем состояние пользователя
+      await refreshUserData();
       
-      // После успешного сохранения перенаправляем на страницу профиля
-      navigate('/profile');
+      console.log('✅ Профиль успешно сохранен');
+      
+      // Показываем сообщение об успехе
+      setIsSuccess(true);
+      
+      setTimeout(() => {
+        navigate('/profile');
+      }, 2000);
     } catch (error) {
-      console.error('Ошибка при сохранении профиля:', error);
-      alert('Произошла ошибка при сохранении профиля. Пожалуйста, попробуйте снова.');
+      console.error('❌ Ошибка при сохранении профиля:', error);
+      alert('Произошла ошибка при сохранении профиля. Пожалуйста, попробуйте позже.');
     } finally {
       setIsSaving(false);
     }
@@ -192,124 +209,355 @@ const EditProfilePage: React.FC = () => {
     navigate('/profile');
   };
 
+  // Функция для изменения роли пользователя на администратора
+  const makeUserAdmin = async () => {
+    if (!currentUser) {
+      alert('Для изменения роли нужно войти в систему');
+      return;
+    }
+    
+    const confirmed = window.confirm('Вы уверены, что хотите стать администратором? Это предоставит вам расширенные права в системе.');
+    if (!confirmed) return;
+    
+    try {
+      // Принудительно проверяем подключение перед любыми операциями
+      console.log('🔄 Назначение пользователя администратором...');
+      
+      // Обновляем данные в localStorage
+      const updatedUserData = {
+        ...userData,
+        role: 'admin'
+      };
+      
+      // Сохраняем в localStorage
+      localStorage.setItem('userData', JSON.stringify(updatedUserData));
+      
+      // Обновляем состояние пользователя
+      await refreshUserData();
+      
+      console.log('✅ Пользователь назначен администратором');
+      alert('Вы стали администратором!');
+    } catch (error) {
+      console.error('❌ Ошибка при назначении администратора:', error);
+      alert('Произошла ошибка при назначении администратора.');
+    }
+  };
+
+  // Функция для изменения роли пользователя на организатора
+  const makeUserOrganizer = async () => {
+    if (!currentUser) {
+      alert('Для изменения роли нужно войти в систему');
+      return;
+    }
+    
+    const confirmed = window.confirm('Вы уверены, что хотите стать организатором? Это позволит вам создавать и управлять играми.');
+    if (!confirmed) return;
+    
+    try {
+      // Принудительно проверяем подключение перед любыми операциями
+      console.log('🔄 Назначение пользователя организатором...');
+      
+      // Обновляем данные в localStorage
+      const updatedUserData = {
+        ...userData,
+        role: 'organizer'
+      };
+      
+      // Сохраняем в localStorage
+      localStorage.setItem('userData', JSON.stringify(updatedUserData));
+      
+      // Обновляем состояние пользователя
+      await refreshUserData();
+      
+      console.log('✅ Пользователь назначен организатором');
+      alert('Вы стали организатором!');
+    } catch (error) {
+      console.error('❌ Ошибка при назначении организатора:', error);
+      alert('Произошла ошибка при назначении организатора.');
+    }
+  };
+
   if (isLoading) {
     return (
-      <LoadingContainer>
-        <LoadingSpinner />
-        <LoadingText>Загрузка профиля...</LoadingText>
-      </LoadingContainer>
+      <PageContainer>
+        <LoadingContainer>
+          <LoadingSpinner />
+          <LoadingText>Загрузка профиля...</LoadingText>
+        </LoadingContainer>
+      </PageContainer>
     );
   }
 
   return (
     <PageContainer>
-      <div className="container">
-        <PageHeader>
-          <BackLink as={Link} to="/profile">
-            <FiArrowLeft />
-            <span>Назад к профилю</span>
-          </BackLink>
-          <PageTitle>Редактирование профиля</PageTitle>
-        </PageHeader>
+      <Header>
+        <BackButton to="/profile">
+          <FiArrowLeft size={20} />
+          <span>Назад к профилю</span>
+        </BackButton>
+        <PageTitle>Редактирование профиля</PageTitle>
+      </Header>
 
-        <FormContainer
-          as={motion.form}
-          onSubmit={handleSubmit}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <FormSection>
-            <SectionTitle>Основная информация</SectionTitle>
+      <NetworkStatusBar online={isOnline}>
+        <NetworkStatusIcon>
+          {isOnline ? <FiWifi size={18} /> : <FiWifiOff size={18} />}
+        </NetworkStatusIcon>
+        <NetworkStatusText>
+          {isOnline 
+            ? 'Онлайн режим: подключение к Firebase установлено' 
+            : 'Офлайн режим: нет подключения к Firebase'}
+        </NetworkStatusText>
+        {!isOnline && (
+          <NetworkWarningIcon>
+            <FiAlertTriangle size={18} />
+          </NetworkWarningIcon>
+        )}
+      </NetworkStatusBar>
+
+      <FormContainer
+        as={motion.form}
+        onSubmit={handleSubmit}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <FormSection>
+          <SectionTitle>Основная информация</SectionTitle>
+          
+          <AvatarSection>
+            <AvatarPreview>
+              {formData.avatarPreview ? (
+                <img src={formData.avatarPreview} alt="Аватар" />
+              ) : (
+                <FiUser size={48} />
+              )}
+            </AvatarPreview>
+            <AvatarUpload>
+              <AvatarUploadLabel htmlFor="avatar">
+                <FiUpload />
+                <span>Загрузить фото</span>
+              </AvatarUploadLabel>
+              <AvatarUploadInput
+                type="file"
+                id="avatar"
+                accept="image/*"
+                onChange={handleAvatarChange}
+              />
+              <AvatarUploadHint>
+                Рекомендуемый размер: 200x200 пикселей, JPG или PNG
+              </AvatarUploadHint>
+            </AvatarUpload>
+          </AvatarSection>
+
+          <FormGroup>
+            <FormLabel htmlFor="name">Имя</FormLabel>
+            <FormInput
+              type="text"
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="Введите ваше имя"
+              hasError={!!errors.name}
+            />
+            {errors.name && <FormError>{errors.name}</FormError>}
+          </FormGroup>
+
+          <FormGroup>
+            <FormLabel htmlFor="email">Email</FormLabel>
+            <FormInput
+              type="email"
+              id="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              placeholder="Введите ваш email"
+              hasError={!!errors.email}
+            />
+            {errors.email && <FormError>{errors.email}</FormError>}
+          </FormGroup>
+
+          <FormGroup>
+            <FormLabel htmlFor="phone">Телефон</FormLabel>
+            <FormInput
+              type="tel"
+              id="phone"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              placeholder="Введите ваш номер телефона"
+              hasError={!!errors.phone}
+            />
+            {errors.phone && <FormError>{errors.phone}</FormError>}
+            <FormHint>Например: +7 (999) 123-45-67</FormHint>
+          </FormGroup>
+        </FormSection>
+        
+        <FormSection>
+          <SectionTitle>Управление ролью</SectionTitle>
+          <InfoText>
+            Роли определяют ваши возможности в приложении. Выберите роль, соответствующую вашим потребностям:
+          </InfoText>
+
+          <ConnectSection>
+            <ConnectButtons>
+              <ConnectButton 
+                type="button"
+                variant="outlined"
+                onClick={async () => {
+                  try {
+                    const isConnected = await checkFirestoreConnection();
+                    if (isConnected) {
+                      setIsOnline(true);
+                      alert('Подключение к Firebase установлено успешно!');
+                    } else {
+                      setIsOnline(false);
+                      alert('Не удалось подключиться к Firebase. Проверьте интернет-соединение.');
+                    }
+                  } catch (error: any) {
+                    setIsOnline(false);
+                    alert(`Ошибка проверки подключения: ${error.message}`);
+                  }
+                }}
+                leftIcon={<FiWifi />}
+              >
+                Проверить подключение
+              </ConnectButton>
+              
+              <ConnectButton 
+                type="button"
+                variant={isOnline ? "danger" : "success"}
+                onClick={async () => {
+                  try {
+                    const newState = !isOnline;
+                    const success = await toggleNetworkMode(newState);
+                    if (success) {
+                      setIsOnline(newState);
+                      alert(`${newState ? 'Онлайн' : 'Офлайн'}-режим успешно включен`);
+                    }
+                  } catch (error: any) {
+                    alert(`Ошибка переключения режима: ${error.message}`);
+                  }
+                }}
+                leftIcon={isOnline ? <FiWifiOff /> : <FiWifi />}
+              >
+                {isOnline ? 'Перейти в офлайн-режим' : 'Перейти в онлайн-режим'}
+              </ConnectButton>
+              
+              <ConnectButton 
+                type="button" 
+                variant="primary"
+                onClick={async () => {
+                  try {
+                    alert('Запуск процедуры восстановления соединения...');
+                    
+                    // Деактивируем и затем активируем сеть
+                    await toggleNetworkMode(false);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Принудительное подключение с несколькими попытками
+                    const success = await forceOnline();
+                    
+                    if (success) {
+                      // Дополнительная проверка реального подключения
+                      const connectionOk = await checkFirestoreConnection();
+                      setIsOnline(connectionOk);
+                      
+                      if (connectionOk) {
+                        alert('Подключение к Firebase полностью восстановлено! Теперь вы можете изменять роли и работать с базой данных.');
+                      } else {
+                        alert('Частичное восстановление подключения. Повторите попытку еще раз.');
+                      }
+                    } else {
+                      alert('Не удалось восстановить подключение. Попробуйте перезагрузить страницу или приложение.');
+                      setIsOnline(false);
+                    }
+                  } catch (error: any) {
+                    alert(`Ошибка при восстановлении подключения: ${error.message}`);
+                    console.error('Ошибка при восстановлении подключения:', error);
+                  }
+                }}
+                leftIcon={<FiWifi />}
+              >
+                Принудительно восстановить подключение
+              </ConnectButton>
+            </ConnectButtons>
             
-            <AvatarSection>
-              <AvatarPreview>
-                {formData.avatarPreview ? (
-                  <img src={formData.avatarPreview} alt="Аватар" />
-                ) : (
-                  <FiUser size={48} />
-                )}
-              </AvatarPreview>
-              <AvatarUpload>
-                <AvatarUploadLabel htmlFor="avatar">
-                  <FiUpload />
-                  <span>Загрузить фото</span>
-                </AvatarUploadLabel>
-                <AvatarUploadInput
-                  type="file"
-                  id="avatar"
-                  accept="image/*"
-                  onChange={handleAvatarChange}
-                />
-                <AvatarUploadHint>
-                  Рекомендуемый размер: 200x200 пикселей, JPG или PNG
-                </AvatarUploadHint>
-              </AvatarUpload>
-            </AvatarSection>
+            <ConnectionInfo>
+              {isOnline 
+                ? 'Вы находитесь в онлайн-режиме. Все функции доступны.' 
+                : 'Если вы испытываете проблемы с изменением роли, попробуйте проверить подключение к серверу.'}
+              {!isOnline && (
+                <ConnectionWarning>
+                  Вы находитесь в офлайн-режиме! Изменение ролей недоступно.
+                </ConnectionWarning>
+              )}
+            </ConnectionInfo>
+          </ConnectSection>
+          
+          <RoleContainer>
+            <RoleOption>
+              <RoleOptionTitle isActive={userData?.role === 'user'}>Пользователь</RoleOptionTitle>
+              <RoleOptionDescription>
+                Базовая роль. Позволяет просматривать игры и присоединяться к ним.
+              </RoleOptionDescription>
+            </RoleOption>
+            
+            <RoleOption>
+              <RoleOptionTitle isActive={userData?.role === 'organizer'}>Организатор</RoleOptionTitle>
+              <RoleOptionDescription>
+                Позволяет создавать и управлять играми, приглашать игроков.
+              </RoleOptionDescription>
+              {userData?.role !== 'organizer' && userData?.role !== 'admin' && (
+                <RoleButton
+                  type="button"
+                  onClick={makeUserOrganizer}
+                  leftIcon={<FiShield />}
+                  variant="success"
+                  disabled={isSaving}
+                >
+                  Стать организатором
+                </RoleButton>
+              )}
+            </RoleOption>
+            
+            <RoleOption>
+              <RoleOptionTitle isActive={userData?.role === 'admin'}>Администратор</RoleOptionTitle>
+              <RoleOptionDescription>
+                Полные права в системе, включая управление пользователями и всеми играми.
+              </RoleOptionDescription>
+              {userData?.role !== 'admin' && (
+                <AdminButton
+                  type="button"
+                  onClick={makeUserAdmin}
+                  leftIcon={<FiShield />}
+                  disabled={isSaving}
+                >
+                  Стать администратором
+                </AdminButton>
+              )}
+            </RoleOption>
+          </RoleContainer>
+        </FormSection>
 
-            <FormGroup>
-              <FormLabel htmlFor="name">Имя</FormLabel>
-              <FormInput
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Введите ваше имя"
-                hasError={!!errors.name}
-              />
-              {errors.name && <FormError>{errors.name}</FormError>}
-            </FormGroup>
-
-            <FormGroup>
-              <FormLabel htmlFor="email">Email</FormLabel>
-              <FormInput
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="Введите ваш email"
-                hasError={!!errors.email}
-              />
-              {errors.email && <FormError>{errors.email}</FormError>}
-            </FormGroup>
-
-            <FormGroup>
-              <FormLabel htmlFor="phone">Телефон</FormLabel>
-              <FormInput
-                type="tel"
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="Введите ваш номер телефона"
-                hasError={!!errors.phone}
-              />
-              {errors.phone && <FormError>{errors.phone}</FormError>}
-              <FormHint>Например: +7 (999) 123-45-67</FormHint>
-            </FormGroup>
-          </FormSection>
-
-          <FormActions>
-            <Button
-              type="button"
-              variant="outlined"
-              onClick={handleCancel}
-              disabled={isSaving}
-            >
-              Отмена
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={isSaving}
-            >
-              {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
-            </Button>
-          </FormActions>
-        </FormContainer>
-      </div>
+        <FormActions>
+          <Button
+            type="button"
+            variant="outlined"
+            onClick={handleCancel}
+            disabled={isSaving}
+          >
+            Отмена
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={isSaving}
+          >
+            {isSaving ? 'Сохранение...' : 'Сохранить изменения'}
+          </Button>
+        </FormActions>
+      </FormContainer>
     </PageContainer>
   );
 };
@@ -318,11 +566,14 @@ const PageContainer = styled.div`
   padding-bottom: ${({ theme }) => theme.space['2xl']};
 `;
 
-const PageHeader = styled.div`
+const Header = styled.div`
   margin-bottom: ${({ theme }) => theme.space.xl};
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.space.sm};
 `;
 
-const BackLink = styled.a`
+const BackButton = styled(Link)`
   display: inline-flex;
   align-items: center;
   gap: ${({ theme }) => theme.space.xs};
@@ -335,6 +586,10 @@ const BackLink = styled.a`
   &:hover {
     color: ${({ theme }) => theme.colors.primary};
   }
+`;
+
+const PageHeader = styled.div`
+  margin-bottom: ${({ theme }) => theme.space.xl};
 `;
 
 const PageTitle = styled.h1`
@@ -474,6 +729,37 @@ const FormHint = styled.p`
   margin-top: ${({ theme }) => theme.space.xs};
 `;
 
+const InfoText = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-bottom: ${({ theme }) => theme.space.md};
+`;
+
+const RoleContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.space.lg};
+`;
+
+const RoleOption = styled.div`
+  padding: ${({ theme }) => theme.space.md};
+  background-color: ${({ theme }) => theme.colors.backgroundDark};
+  border-radius: ${({ theme }) => theme.radii.md};
+`;
+
+const RoleOptionTitle = styled.h3<{ isActive?: boolean }>`
+  font-size: ${({ theme }) => theme.fontSizes.lg};
+  font-weight: ${({ theme }) => theme.fontWeights.bold};
+  color: ${({ isActive, theme }) => isActive ? theme.colors.primary : theme.colors.textPrimary};
+  margin-bottom: ${({ theme }) => theme.space.xs};
+`;
+
+const RoleOptionDescription = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-bottom: ${({ theme }) => theme.space.md};
+`;
+
 const FormActions = styled.div`
   display: flex;
   justify-content: flex-end;
@@ -482,33 +768,106 @@ const FormActions = styled.div`
   background-color: ${({ theme }) => theme.colors.backgroundDark};
 `;
 
+const AdminButton = styled(Button)`
+  background-color: ${({ theme, disabled }) => 
+    disabled ? theme.colors.textTertiary : theme.colors.warning};
+  color: white;
+  
+  &:hover:not(:disabled) {
+    background-color: ${({ theme }) => theme.colors.warningDark};
+  }
+`;
+
+const RoleButton = styled(Button)`
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+`;
+
 const LoadingContainer = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: ${({ theme }) => theme.space['3xl']} 0;
+  height: 50vh;
+  gap: ${({ theme }) => theme.space.md};
 `;
 
 const LoadingSpinner = styled.div`
-  width: 48px;
-  height: 48px;
-  border: 4px solid rgba(74, 106, 255, 0.2);
-  border-left-color: ${({ theme }) => theme.colors.primary};
+  border: 4px solid ${({ theme }) => theme.colors.backgroundDark};
+  border-top: 4px solid ${({ theme }) => theme.colors.primary};
   border-radius: 50%;
+  width: 40px;
+  height: 40px;
   animation: spin 1s linear infinite;
-  margin-bottom: ${({ theme }) => theme.space.md};
   
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 `;
 
-const LoadingText = styled.p`
-  font-size: ${({ theme }) => theme.fontSizes.lg};
+const LoadingText = styled.div`
   color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: ${({ theme }) => theme.fontSizes.md};
 `;
 
-export default EditProfilePage; 
+const ConnectionInfo = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  margin-top: ${({ theme }) => theme.space.xs};
+`;
+
+const ConnectSection = styled.div`
+  margin-bottom: ${({ theme }) => theme.space.xl};
+  padding: ${({ theme }) => theme.space.md};
+  background-color: ${({ theme }) => theme.colors.backgroundDark};
+  border-radius: ${({ theme }) => theme.radii.md};
+`;
+
+const ConnectButtons = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${({ theme }) => theme.space.sm};
+  margin-bottom: ${({ theme }) => theme.space.sm};
+`;
+
+const ConnectButton = styled(Button)`
+  margin-bottom: ${({ theme }) => theme.space.xs};
+`;
+
+const ConnectionWarning = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.danger};
+  font-weight: ${({ theme }) => theme.fontWeights.bold};
+  margin-top: ${({ theme }) => theme.space.xs};
+`;
+
+const NetworkStatusBar = styled.div<{ online: boolean }>`
+  display: flex;
+  align-items: center;
+  padding: ${({ theme }) => theme.space.sm};
+  background-color: ${({ online, theme }) => 
+    online ? theme.colors.success + '20' : theme.colors.danger + '20'};
+  border-radius: ${({ theme }) => theme.radii.md};
+  margin-bottom: ${({ theme }) => theme.space.md};
+`;
+
+const NetworkStatusIcon = styled.div`
+  margin-right: ${({ theme }) => theme.space.sm};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const NetworkStatusText = styled.span`
+  flex: 1;
+`;
+
+const NetworkWarningIcon = styled.span`
+  display: flex;
+  align-items: center;
+  margin-left: ${({ theme }) => theme.space.sm};
+`;
+
+export default EditProfilePage;

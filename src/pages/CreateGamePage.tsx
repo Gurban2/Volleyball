@@ -1,48 +1,72 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiCalendar, FiClock, FiMap, FiUpload, FiX, FiCheck } from 'react-icons/fi';
+import { FiArrowLeft, FiCalendar, FiClock, FiMap, FiCheck, FiUsers } from 'react-icons/fi';
 import Button from '../components/ui/Button';
+import { useAuth } from '../contexts/AuthContext';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { ru } from 'date-fns/locale/ru';
 
 interface GameFormData {
   title: string;
-  description: string;
   location: string;
-  date: string;
-  time: string;
+  dateObj: Date | null;
+  timeObj: Date | null;
   duration: string;
   format: string;
   totalSpots: number;
-  image: File | null;
-  imagePreview: string;
 }
 
+// Только 2 формата игры согласно требованиям
 const FORMATS = [
-  { value: 'round_robin', label: 'Round Robin' },
-  { value: 'single_elimination', label: 'Single Elimination' },
-  { value: 'double_elimination', label: 'Double Elimination' },
-  { value: 'friendly', label: 'Friendly Match' }
+  { value: 'friendly', label: 'Дружеская игра' },
+  { value: 'tournament', label: 'Турнир' }
 ];
 
 const CreateGamePage: React.FC = () => {
   const navigate = useNavigate();
+  const { currentUser, userData, isOrganizer, isAdmin } = useAuth();
+  
+  // Автозаполнение имени организатора в заголовке
+  const organizerName = userData?.displayName || 'Игра';
+  const defaultTitle = `Игра от ${organizerName}`;
+  
+  // Текущая дата и время для минимальных значений
+  const today = new Date();
+  const minDate = new Date();
+  const minTime = new Date();
+  
+  // Устанавливаем минимальное время (текущее + 3 часа)
+  minTime.setHours(today.getHours() + 3);
+  
   const [formData, setFormData] = useState<GameFormData>({
-    title: '',
-    description: '',
+    title: defaultTitle,
     location: '',
-    date: '',
-    time: '',
+    dateObj: null,
+    timeObj: null,
     duration: '2',
-    format: 'round_robin',
-    totalSpots: 12,
-    image: null,
-    imagePreview: '',
+    format: 'friendly',
+    totalSpots: 12, // Минимальное количество игроков по умолчанию
   });
   
-  const [errors, setErrors] = useState<Partial<Record<keyof GameFormData, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof GameFormData | 'date' | 'time', string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!isOrganizer() && !isAdmin()) {
+      console.log('⚠️ У пользователя нет прав для создания игры, перенаправление...');
+      navigate('/access-denied');
+    }
+    
+    // Обновляем заголовок при изменении имени пользователя
+    setFormData(prev => ({
+      ...prev,
+      title: defaultTitle
+    }));
+  }, [currentUser, userData, isOrganizer, isAdmin, navigate, defaultTitle]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -60,10 +84,90 @@ const CreateGamePage: React.FC = () => {
     }
   };
   
+  const handleDateChange = (date: Date | null) => {
+    if (date) {
+      setFormData(prev => ({
+        ...prev,
+        dateObj: date,
+      }));
+      
+      if (errors.date || errors.dateObj) {
+        setErrors(prev => ({
+          ...prev,
+          date: undefined,
+          dateObj: undefined,
+        }));
+      }
+      
+      // Если меняем дату на сегодня, проверяем время
+      const today = new Date();
+      const isToday = date.getDate() === today.getDate() &&
+                      date.getMonth() === today.getMonth() &&
+                      date.getFullYear() === today.getFullYear();
+      
+      if (isToday && formData.timeObj) {
+        // Проверяем, что время как минимум через 3 часа
+        const gameTime = new Date(formData.timeObj);
+        const minAllowedTime = new Date();
+        minAllowedTime.setHours(today.getHours() + 3);
+        
+        if (gameTime < minAllowedTime) {
+          setErrors(prev => ({
+            ...prev,
+            time: 'Время начала должно быть минимум через 3 часа от текущего времени',
+            timeObj: 'Время начала должно быть минимум через 3 часа от текущего времени',
+          }));
+        }
+      }
+    }
+  };
+  
+  const handleTimeChange = (time: Date | null) => {
+    if (time) {
+      setFormData(prev => ({
+        ...prev,
+        timeObj: time,
+      }));
+      
+      if (errors.time || errors.timeObj) {
+        setErrors(prev => ({
+          ...prev,
+          time: undefined,
+          timeObj: undefined,
+        }));
+      }
+      
+      // Если дата сегодня, проверяем время
+      if (formData.dateObj) {
+        const today = new Date();
+        const isToday = formData.dateObj.getDate() === today.getDate() &&
+                        formData.dateObj.getMonth() === today.getMonth() &&
+                        formData.dateObj.getFullYear() === today.getFullYear();
+        
+        if (isToday) {
+          // Проверяем, что время как минимум через 3 часа
+          const gameTime = new Date(time);
+          const minAllowedTime = new Date();
+          minAllowedTime.setHours(today.getHours() + 3);
+          
+          if (gameTime < minAllowedTime) {
+            setErrors(prev => ({
+              ...prev,
+              time: 'Время начала должно быть минимум через 3 часа от текущего времени',
+              timeObj: 'Время начала должно быть минимум через 3 часа от текущего времени',
+            }));
+          }
+        }
+      }
+    }
+  };
+  
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const numValue = parseInt(value, 10);
-    if (!isNaN(numValue) && numValue > 0) {
+    
+    // Минимальное количество участников - 12
+    if (!isNaN(numValue) && numValue >= 12) {
       setFormData(prev => ({
         ...prev,
         [name]: numValue,
@@ -78,59 +182,62 @@ const CreateGamePage: React.FC = () => {
     }
   };
   
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      
-      reader.onloadend = () => {
-        setFormData(prev => ({
-          ...prev,
-          image: file,
-          imagePreview: reader.result as string,
-        }));
-      };
-      
-      reader.readAsDataURL(file);
-      
-      if (errors.image) {
-        setErrors(prev => ({
-          ...prev,
-          image: undefined,
-        }));
-      }
-    }
-  };
-  
-  const removeImage = () => {
-    setFormData(prev => ({
-      ...prev,
-      image: null,
-      imagePreview: '',
-    }));
-  };
-  
   const validateForm = (): boolean => {
-    const newErrors: Partial<Record<keyof GameFormData, string>> = {};
+    const newErrors: Partial<Record<keyof GameFormData | 'date' | 'time', string>> = {};
     
     if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
+      newErrors.title = 'Введите название игры';
     }
     
     if (!formData.location.trim()) {
-      newErrors.location = 'Location is required';
+      newErrors.location = 'Введите место проведения';
     }
     
-    if (!formData.date) {
-      newErrors.date = 'Date is required';
+    if (!formData.dateObj) {
+      newErrors.date = 'Выберите дату';
+      newErrors.dateObj = 'Выберите дату';
+    } else {
+      // Проверка, что дата в будущем
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const gameDate = new Date(formData.dateObj);
+      gameDate.setHours(0, 0, 0, 0);
+      
+      if (gameDate < today) {
+        newErrors.date = 'Дата должна быть в будущем';
+        newErrors.dateObj = 'Дата должна быть в будущем';
+      }
     }
     
-    if (!formData.time) {
-      newErrors.time = 'Time is required';
+    if (!formData.timeObj) {
+      newErrors.time = 'Выберите время';
+      newErrors.timeObj = 'Выберите время';
+    } else {
+      // Проверка, что время как минимум через 3 часа от текущего
+      const now = new Date();
+      
+      // Если дата сегодня
+      if (formData.dateObj) {
+        const today = new Date();
+        const isToday = formData.dateObj.getDate() === today.getDate() &&
+                        formData.dateObj.getMonth() === today.getMonth() &&
+                        formData.dateObj.getFullYear() === today.getFullYear();
+        
+        if (isToday) {
+          const gameTime = new Date(formData.timeObj);
+          const minAllowedTime = new Date();
+          minAllowedTime.setHours(now.getHours() + 3);
+          
+          if (gameTime < minAllowedTime) {
+            newErrors.time = 'Время начала должно быть минимум через 3 часа от текущего времени';
+            newErrors.timeObj = 'Время начала должно быть минимум через 3 часа от текущего времени';
+          }
+        }
+      }
     }
     
-    if (!formData.totalSpots || formData.totalSpots <= 0) {
-      newErrors.totalSpots = 'Number of participants must be greater than 0';
+    if (!formData.totalSpots || formData.totalSpots < 12) {
+      newErrors.totalSpots = 'Количество участников должно быть минимум 12';
     }
     
     setErrors(newErrors);
@@ -146,12 +253,31 @@ const CreateGamePage: React.FC = () => {
     
     setIsSubmitting(true);
     
-    // Simulate API call
+    // Форматируем данные для отправки
+    const dateString = formData.dateObj 
+      ? `${formData.dateObj.getDate().toString().padStart(2, '0')}.${(formData.dateObj.getMonth() + 1).toString().padStart(2, '0')}.${formData.dateObj.getFullYear()}`
+      : '';
+      
+    const timeString = formData.timeObj
+      ? `${formData.timeObj.getHours().toString().padStart(2, '0')}:${formData.timeObj.getMinutes().toString().padStart(2, '0')}`
+      : '';
+    
+    const submissionData = {
+      ...formData,
+      date: dateString,
+      time: timeString,
+    };
+    
+    console.log('📊 Создание игры пользователем:', {
+      userId: currentUser?.uid,
+      userRole: userData?.role,
+      gameData: submissionData
+    });
+    
     setTimeout(() => {
       setIsSubmitting(false);
       setSubmitSuccess(true);
       
-      // Redirect to game page after success
       setTimeout(() => {
         navigate('/games/1');
       }, 2000);
@@ -162,162 +288,164 @@ const CreateGamePage: React.FC = () => {
     navigate(-1);
   };
 
+  // Фильтрация времени для ограничения выбора времени в зависимости от даты
+  const filterTime = (time: Date): boolean => {
+    // Если выбрана сегодняшняя дата, ограничиваем по минимальному времени (+3 часа)
+    if (formData.dateObj) {
+      const today = new Date();
+      const isToday = formData.dateObj.getDate() === today.getDate() &&
+                      formData.dateObj.getMonth() === today.getMonth() &&
+                      formData.dateObj.getFullYear() === today.getFullYear();
+      
+      if (isToday) {
+        const minTime = new Date();
+        minTime.setHours(today.getHours() + 3);
+        return time >= minTime;
+      }
+    }
+    
+    return true;
+  };
+
   return (
     <PageContainer>
       <PageHeader>
         <div className="container">
-          <HeaderContent>
-            <BackButton 
-              as={Link} 
-              to="/games"
-              whileHover={{ x: -5 }}
-            >
-              <FiArrowLeft />
-              <span>Back to Games</span>
-            </BackButton>
-            <HeaderTitle
-              as={motion.h1}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              Create New Game
-            </HeaderTitle>
-          </HeaderContent>
+          <BackButton as={Link} to="/games">
+            <FiArrowLeft />
+            <span>Назад к списку игр</span>
+          </BackButton>
+          <PageTitle>Создание новой игры</PageTitle>
         </div>
       </PageHeader>
 
-      <FormSection>
+      <PageContent>
         <div className="container">
           {submitSuccess ? (
             <SuccessMessage
-              as={motion.div}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
               <SuccessIcon>
-                <FiCheck size={32} />
+                <FiCheck size={48} />
               </SuccessIcon>
-              <h2>Game Created Successfully!</h2>
-              <p>Your game has been successfully created. Redirecting to game page...</p>
+              <SuccessTitle>Игра успешно создана!</SuccessTitle>
+              <SuccessText>Вы будете перенаправлены на страницу игры...</SuccessText>
             </SuccessMessage>
           ) : (
             <FormContainer
               as={motion.form}
+              onSubmit={handleSubmit}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              onSubmit={handleSubmit}
+              transition={{ duration: 0.3 }}
             >
               <FormSection>
-                <SectionTitle>Basic Information</SectionTitle>
                 <FormGroup>
-                  <Label htmlFor="title">Game Title*</Label>
-                  <Input
+                  <FormLabel htmlFor="title">Название игры</FormLabel>
+                  <FormInput
                     type="text"
                     id="title"
                     name="title"
                     value={formData.title}
                     onChange={handleChange}
-                    $hasError={!!errors.title}
-                    placeholder="Enter game title"
+                    error={!!errors.title}
+                    placeholder="Введите название игры"
                   />
                   {errors.title && <ErrorMessage>{errors.title}</ErrorMessage>}
                 </FormGroup>
-                
+
                 <FormGroup>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    rows={4}
-                    placeholder="Describe your game, rules, requirements, etc."
-                  />
-                </FormGroup>
-              </FormSection>
-              
-              <FormSection>
-                <SectionTitle>Date & Location</SectionTitle>
-                <FormRow>
-                  <FormGroup>
-                    <Label htmlFor="date">Date*</Label>
-                    <InputWithIcon $hasError={!!errors.date}>
-                      <FiCalendar />
-                      <Input
-                        type="date"
-                        id="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleChange}
-                        $hasError={!!errors.date}
-                      />
-                    </InputWithIcon>
-                    {errors.date && <ErrorMessage>{errors.date}</ErrorMessage>}
-                  </FormGroup>
-                  
-                  <FormGroup>
-                    <Label htmlFor="time">Start Time*</Label>
-                    <InputWithIcon $hasError={!!errors.time}>
-                      <FiClock />
-                      <Input
-                        type="time"
-                        id="time"
-                        name="time"
-                        value={formData.time}
-                        onChange={handleChange}
-                        $hasError={!!errors.time}
-                      />
-                    </InputWithIcon>
-                    {errors.time && <ErrorMessage>{errors.time}</ErrorMessage>}
-                  </FormGroup>
-                  
-                  <FormGroup>
-                    <Label htmlFor="duration">Duration (hours)</Label>
-                    <Select
-                      id="duration"
-                      name="duration"
-                      value={formData.duration}
-                      onChange={handleChange}
-                    >
-                      <option value="1">1 hour</option>
-                      <option value="1.5">1.5 hours</option>
-                      <option value="2">2 hours</option>
-                      <option value="2.5">2.5 hours</option>
-                      <option value="3">3 hours</option>
-                      <option value="4">4 hours</option>
-                      <option value="5">5 hours</option>
-                      <option value="6">6 hours</option>
-                    </Select>
-                  </FormGroup>
-                </FormRow>
-                
-                <FormGroup>
-                  <Label htmlFor="location">Location*</Label>
-                  <InputWithIcon $hasError={!!errors.location}>
-                    <FiMap />
-                    <Input
+                  <FormLabel htmlFor="location">Место проведения</FormLabel>
+                  <InputWithIcon>
+                    <LocationIcon>
+                      <FiMap />
+                    </LocationIcon>
+                    <FormInput
                       type="text"
                       id="location"
                       name="location"
                       value={formData.location}
                       onChange={handleChange}
-                      $hasError={!!errors.location}
-                      placeholder="Enter location address"
+                      error={!!errors.location}
+                      placeholder="Введите адрес или место проведения"
+                      className="input-with-icon"
                     />
                   </InputWithIcon>
                   {errors.location && <ErrorMessage>{errors.location}</ErrorMessage>}
                 </FormGroup>
-              </FormSection>
-              
-              <FormSection>
-                <SectionTitle>Format & Participants</SectionTitle>
+
                 <FormRow>
                   <FormGroup>
-                    <Label htmlFor="format">Game Format</Label>
-                    <Select
+                    <FormLabel htmlFor="date">Дата</FormLabel>
+                    <InputWithIcon>
+                      <DateIcon>
+                        <FiCalendar />
+                      </DateIcon>
+                      <DatePickerWrapper error={!!errors.date}>
+                        <DatePicker
+                          selected={formData.dateObj}
+                          onChange={handleDateChange}
+                          dateFormat="dd.MM.yyyy"
+                          minDate={minDate}
+                          placeholderText="ДД.ММ.ГГГГ"
+                          locale={ru}
+                          className="date-picker-input input-with-icon"
+                          id="date"
+                          autoComplete="off"
+                        />
+                      </DatePickerWrapper>
+                    </InputWithIcon>
+                    {errors.date && <ErrorMessage>{errors.date}</ErrorMessage>}
+                  </FormGroup>
+
+                  <FormGroup>
+                    <FormLabel htmlFor="time">Время начала</FormLabel>
+                    <InputWithIcon>
+                      <TimeIcon>
+                        <FiClock />
+                      </TimeIcon>
+                      <DatePickerWrapper error={!!errors.time}>
+                        <DatePicker
+                          selected={formData.timeObj}
+                          onChange={handleTimeChange}
+                          showTimeSelect
+                          showTimeSelectOnly
+                          timeIntervals={15}
+                          timeCaption="Время"
+                          dateFormat="HH:mm"
+                          placeholderText="ЧЧ:ММ"
+                          locale={ru}
+                          filterTime={filterTime}
+                          className="date-picker-input input-with-icon"
+                          id="time"
+                          autoComplete="off"
+                        />
+                      </DatePickerWrapper>
+                    </InputWithIcon>
+                    {errors.time && <ErrorMessage>{errors.time}</ErrorMessage>}
+                  </FormGroup>
+                </FormRow>
+
+                <FormRow>
+                  <FormGroup>
+                    <FormLabel htmlFor="duration">Продолжительность (часы)</FormLabel>
+                    <FormInput
+                      type="number"
+                      id="duration"
+                      name="duration"
+                      value={formData.duration}
+                      onChange={handleChange}
+                      min="1"
+                      max="10"
+                      placeholder="Введите продолжительность в часах"
+                    />
+                  </FormGroup>
+
+                  <FormGroup>
+                    <FormLabel htmlFor="format">Формат игры</FormLabel>
+                    <FormSelect
                       id="format"
                       name="format"
                       value={formData.format}
@@ -328,368 +456,278 @@ const CreateGamePage: React.FC = () => {
                           {format.label}
                         </option>
                       ))}
-                    </Select>
+                    </FormSelect>
                   </FormGroup>
-                  
-                  <FormGroup>
-                    <Label htmlFor="totalSpots">Number of Participants*</Label>
-                    <Input
+                </FormRow>
+
+                <FormGroup>
+                  <FormLabel htmlFor="totalSpots">Количество участников</FormLabel>
+                  <InputWithIcon>
+                    <UsersIcon>
+                      <FiUsers />
+                    </UsersIcon>
+                    <FormInput
                       type="number"
                       id="totalSpots"
                       name="totalSpots"
-                      min="1"
                       value={formData.totalSpots}
                       onChange={handleNumberChange}
-                      $hasError={!!errors.totalSpots}
+                      error={!!errors.totalSpots}
+                      min="12"
+                      className="input-with-icon"
+                      placeholder="Минимум 12 участников"
                     />
-                    {errors.totalSpots && <ErrorMessage>{errors.totalSpots}</ErrorMessage>}
-                  </FormGroup>
-                </FormRow>
+                  </InputWithIcon>
+                  {errors.totalSpots && <ErrorMessage>{errors.totalSpots}</ErrorMessage>}
+                </FormGroup>
               </FormSection>
-              
-              <FormSection>
-                <SectionTitle>Game Image</SectionTitle>
-                <ImageUploadContainer>
-                  {formData.imagePreview ? (
-                    <ImagePreviewContainer>
-                      <ImagePreview src={formData.imagePreview} alt="Game preview" />
-                      <RemoveImageButton onClick={removeImage}>
-                        <FiX />
-                      </RemoveImageButton>
-                    </ImagePreviewContainer>
-                  ) : (
-                    <ImageUploadLabel htmlFor="image">
-                      <FiUpload size={32} />
-                      <span>Click to upload an image</span>
-                      <p>PNG, JPG or WEBP (max. 5MB)</p>
-                      <ImageUploadInput
-                        type="file"
-                        id="image"
-                        name="image"
-                        accept="image/png, image/jpeg, image/webp"
-                        onChange={handleImageChange}
-                      />
-                    </ImageUploadLabel>
-                  )}
-                </ImageUploadContainer>
-              </FormSection>
-              
+
               <FormActions>
                 <Button
                   type="button"
-                  variant="outlined"
+                  variant="secondary"
                   onClick={handleCancel}
+                  disabled={isSubmitting}
                 >
-                  Cancel
+                  Отмена
                 </Button>
                 <Button
                   type="submit"
                   variant="primary"
+                  disabled={isSubmitting}
                   isLoading={isSubmitting}
                 >
-                  Create Game
+                  Создать игру
                 </Button>
               </FormActions>
             </FormContainer>
           )}
         </div>
-      </FormSection>
+      </PageContent>
     </PageContainer>
   );
 };
 
+// Styled Components
 const PageContainer = styled.div`
-  margin-bottom: ${({ theme }) => theme.space['2xl']};
+  min-height: 100vh;
+  background-color: ${({ theme }) => theme.colors.background};
 `;
 
 const PageHeader = styled.header`
   background-color: ${({ theme }) => theme.colors.primary};
   color: white;
-  padding: ${({ theme }) => theme.space.xl} 0;
+  padding: ${({ theme }) => theme.space.lg} 0;
 `;
 
-const HeaderContent = styled.div`
-  position: relative;
-`;
-
-const BackButton = styled(motion(Link))`
-  display: flex;
+const BackButton = styled(Link)`
+  display: inline-flex;
   align-items: center;
   gap: ${({ theme }) => theme.space.xs};
   color: white;
-  font-weight: ${({ theme }) => theme.fontWeights.medium};
-  margin-bottom: ${({ theme }) => theme.space.sm};
+  margin-bottom: ${({ theme }) => theme.space.xs};
+  text-decoration: none;
   
   &:hover {
-    opacity: 0.8;
+    text-decoration: underline;
   }
 `;
 
-const HeaderTitle = styled.h1`
-  font-size: ${({ theme }) => theme.fontSizes['3xl']};
+const PageTitle = styled.h1`
+  font-size: ${({ theme }) => theme.fontSizes.xl};
   font-weight: ${({ theme }) => theme.fontWeights.bold};
-  
-  @media (max-width: 768px) {
-    font-size: ${({ theme }) => theme.fontSizes['2xl']};
-  }
 `;
 
-const FormSection = styled.div`
+const PageContent = styled.main`
   padding: ${({ theme }) => theme.space.xl} 0;
 `;
 
 const FormContainer = styled.form`
+  max-width: 800px;
+  margin: 0 auto;
   background-color: white;
   border-radius: ${({ theme }) => theme.radii.lg};
   box-shadow: ${({ theme }) => theme.shadows.md};
-  padding: ${({ theme }) => theme.space.xl};
-  display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.space.xl};
-  
-  @media (max-width: 768px) {
-    padding: ${({ theme }) => theme.space.lg};
-  }
+  overflow: hidden;
 `;
 
-const SectionTitle = styled.h2`
-  font-size: ${({ theme }) => theme.fontSizes.xl};
-  font-weight: ${({ theme }) => theme.fontWeights.bold};
-  color: ${({ theme }) => theme.colors.textPrimary};
-  margin-bottom: ${({ theme }) => theme.space.md};
-  padding-bottom: ${({ theme }) => theme.space.xs};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.backgroundDark};
+const FormSection = styled.section`
+  padding: ${({ theme }) => theme.space.lg};
 `;
 
 const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
   margin-bottom: ${({ theme }) => theme.space.lg};
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
 `;
 
 const FormRow = styled.div`
   display: grid;
-  grid-template-columns: 1fr;
-  gap: ${({ theme }) => theme.space.lg};
+  grid-template-columns: 1fr 1fr;
+  gap: ${({ theme }) => theme.space.md};
   
-  @media (min-width: 768px) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  @media (min-width: 1024px) {
-    grid-template-columns: repeat(3, 1fr);
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
   }
 `;
 
-const Label = styled.label`
+const FormLabel = styled.label`
+  display: block;
+  font-size: ${({ theme }) => theme.fontSizes.sm};
   font-weight: ${({ theme }) => theme.fontWeights.medium};
-  margin-bottom: ${({ theme }) => theme.space.xs};
   color: ${({ theme }) => theme.colors.textPrimary};
+  margin-bottom: ${({ theme }) => theme.space.xs};
 `;
 
-interface InputProps {
-  $hasError?: boolean;
+interface FormInputProps {
+  error?: boolean;
 }
 
-const Input = styled.input<InputProps>`
+const FormInput = styled.input<FormInputProps>`
+  width: 100%;
   padding: ${({ theme }) => theme.space.md};
-  border: 1px solid ${({ theme, $hasError }) => 
-    $hasError ? theme.colors.danger : theme.colors.border};
+  border: 1px solid ${({ theme, error }) => 
+    error ? theme.colors.danger : theme.colors.border};
   border-radius: ${({ theme }) => theme.radii.md};
   font-size: ${({ theme }) => theme.fontSizes.md};
-  transition: ${({ theme }) => theme.transitions.default};
-  width: 100%;
   
   &:focus {
     outline: none;
-    border-color: ${({ theme, $hasError }) => 
-      $hasError ? theme.colors.danger : theme.colors.primary};
-    box-shadow: 0 0 0 3px ${({ theme, $hasError }) => 
-      $hasError ? `${theme.colors.danger}25` : `${theme.colors.primary}25`};
+    border-color: ${({ theme, error }) => 
+      error ? theme.colors.danger : theme.colors.primary};
+    box-shadow: 0 0 0 2px ${({ theme, error }) => 
+      error ? `${theme.colors.danger}25` : `${theme.colors.primary}25`};
+  }
+  
+  &.input-with-icon {
+    padding-left: 2.5rem;
   }
 `;
 
-const InputWithIcon = styled.div<InputProps>`
-  position: relative;
-  
-  svg {
-    position: absolute;
-    left: ${({ theme }) => theme.space.md};
-    top: 50%;
-    transform: translateY(-50%);
-    color: ${({ theme, $hasError }) => 
-      $hasError ? theme.colors.danger : theme.colors.textSecondary};
-  }
-  
-  input {
-    padding-left: ${({ theme }) => theme.space.xl};
-  }
-`;
-
-const Textarea = styled.textarea`
+const FormSelect = styled.select`
+  width: 100%;
   padding: ${({ theme }) => theme.space.md};
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.radii.md};
   font-size: ${({ theme }) => theme.fontSizes.md};
-  transition: ${({ theme }) => theme.transitions.default};
-  resize: vertical;
-  min-height: 120px;
-  width: 100%;
-  font-family: inherit;
-  
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.primary};
-    box-shadow: 0 0 0 3px ${({ theme }) => `${theme.colors.primary}25`};
-  }
-`;
-
-const Select = styled.select`
-  padding: ${({ theme }) => theme.space.md};
-  border: 1px solid ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.radii.md};
-  font-size: ${({ theme }) => theme.fontSizes.md};
-  transition: ${({ theme }) => theme.transitions.default};
-  width: 100%;
   background-color: white;
   
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.colors.primary};
-    box-shadow: 0 0 0 3px ${({ theme }) => `${theme.colors.primary}25`};
+    box-shadow: 0 0 0 2px ${({ theme }) => `${theme.colors.primary}25`};
   }
 `;
 
-const ErrorMessage = styled.div`
-  color: ${({ theme }) => theme.colors.danger};
-  font-size: ${({ theme }) => theme.fontSizes.sm};
-  margin-top: ${({ theme }) => theme.space.xs};
+const InputWithIcon = styled.div`
+  position: relative;
 `;
 
-const ImageUploadContainer = styled.div`
-  width: 100%;
-  border: 2px dashed ${({ theme }) => theme.colors.border};
-  border-radius: ${({ theme }) => theme.radii.lg};
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
-`;
-
-const ImageUploadLabel = styled.label`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  cursor: pointer;
-  color: ${({ theme }) => theme.colors.textSecondary};
-  padding: ${({ theme }) => theme.space.xl};
-  text-align: center;
-  
-  span {
-    margin-top: ${({ theme }) => theme.space.md};
-    font-weight: ${({ theme }) => theme.fontWeights.medium};
-    font-size: ${({ theme }) => theme.fontSizes.lg};
-    color: ${({ theme }) => theme.colors.textPrimary};
-  }
-  
-  p {
-    margin-top: ${({ theme }) => theme.space.xs};
-    font-size: ${({ theme }) => theme.fontSizes.sm};
-  }
-  
-  &:hover {
-    background-color: ${({ theme }) => theme.colors.backgroundLight};
+const DatePickerWrapper = styled.div<FormInputProps>`
+  .date-picker-input {
+    width: 100%;
+    padding: ${({ theme }) => theme.space.md};
+    padding-left: 2.5rem;
+    border: 1px solid ${({ theme, error }) => 
+      error ? theme.colors.danger : theme.colors.border};
+    border-radius: ${({ theme }) => theme.radii.md};
+    font-size: ${({ theme }) => theme.fontSizes.md};
     
-    svg {
-      color: ${({ theme }) => theme.colors.primary};
+    &:focus {
+      outline: none;
+      border-color: ${({ theme, error }) => 
+        error ? theme.colors.danger : theme.colors.primary};
+      box-shadow: 0 0 0 2px ${({ theme, error }) => 
+        error ? `${theme.colors.danger}25` : `${theme.colors.primary}25`};
     }
   }
 `;
 
-const ImageUploadInput = styled.input`
-  display: none;
-`;
-
-const ImagePreviewContainer = styled.div`
-  position: relative;
-  width: 100%;
-  height: 100%;
-`;
-
-const ImagePreview = styled.img`
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-`;
-
-const RemoveImageButton = styled.button`
+const DateIcon = styled.div`
   position: absolute;
-  top: ${({ theme }) => theme.space.md};
-  right: ${({ theme }) => theme.space.md};
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: ${({ theme }) => theme.colors.danger};
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  box-shadow: ${({ theme }) => theme.shadows.md};
-  transition: ${({ theme }) => theme.transitions.default};
-  
-  &:hover {
-    transform: scale(1.1);
-  }
+  top: 50%;
+  left: 0.75rem;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.colors.textSecondary};
+  pointer-events: none;
+  z-index: 1;
+`;
+
+const TimeIcon = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.colors.textSecondary};
+  pointer-events: none;
+  z-index: 1;
+`;
+
+const LocationIcon = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.colors.textSecondary};
+  pointer-events: none;
+  z-index: 1;
+`;
+
+const UsersIcon = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.colors.textSecondary};
+  pointer-events: none;
+  z-index: 1;
+`;
+
+const ErrorMessage = styled.p`
+  color: ${({ theme }) => theme.colors.danger};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  margin-top: ${({ theme }) => theme.space.xs};
 `;
 
 const FormActions = styled.div`
   display: flex;
   justify-content: flex-end;
   gap: ${({ theme }) => theme.space.md};
-  
-  @media (max-width: 640px) {
-    flex-direction: column-reverse;
-  }
+  padding: ${({ theme }) => theme.space.lg};
+  background-color: ${({ theme }) => theme.colors.backgroundLight};
+  border-top: 1px solid ${({ theme }) => theme.colors.border};
 `;
 
-const SuccessMessage = styled.div`
+const SuccessMessage = styled(motion.div)`
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: ${({ theme }) => theme.space.xl};
   background-color: white;
   border-radius: ${({ theme }) => theme.radii.lg};
   box-shadow: ${({ theme }) => theme.shadows.md};
-  padding: ${({ theme }) => theme.space['2xl']};
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  
-  h2 {
-    font-size: ${({ theme }) => theme.fontSizes['2xl']};
-    font-weight: ${({ theme }) => theme.fontWeights.bold};
-    color: ${({ theme }) => theme.colors.textPrimary};
-    margin: ${({ theme }) => theme.space.md} 0;
-  }
-  
-  p {
-    color: ${({ theme }) => theme.colors.textSecondary};
-    margin-bottom: ${({ theme }) => theme.space.lg};
-  }
 `;
 
 const SuccessIcon = styled.div`
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background-color: ${({ theme }) => theme.colors.success};
-  color: white;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto ${({ theme }) => theme.space.lg};
+  background-color: ${({ theme }) => theme.colors.success + '20'};
+  color: ${({ theme }) => theme.colors.success};
+  border-radius: 50%;
+`;
+
+const SuccessTitle = styled.h2`
+  font-size: ${({ theme }) => theme.fontSizes.xl};
+  font-weight: ${({ theme }) => theme.fontWeights.bold};
+  color: ${({ theme }) => theme.colors.textPrimary};
+  margin-bottom: ${({ theme }) => theme.space.sm};
+`;
+
+const SuccessText = styled.p`
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: ${({ theme }) => theme.fontSizes.md};
 `;
 
 export default CreateGamePage; 
