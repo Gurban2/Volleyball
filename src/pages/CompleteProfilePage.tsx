@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { FiUser, FiUpload } from 'react-icons/fi';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadFile } from '../firebase/uploadHelpers';
+
 
 const CompleteProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -105,21 +105,18 @@ const CompleteProfilePage: React.FC = () => {
     try {
       let photoURL = null;
       
-      // Загрузка фотографии, если она была выбрана
+      // Обработка фотографии, если она была выбрана
       if (formData.avatar) {
         try {
-          console.log('🔄 Начинаем загрузку фото...');
+          console.log('🔄 Обработка фото...');
           
-          // Используем функцию загрузки из uploadHelpers
-          photoURL = await uploadFile(
-            formData.avatar, 
-            `user-avatars/${currentUser.uid}`
-          );
+          // Просто создаем локальный URL для аватара
+          photoURL = URL.createObjectURL(formData.avatar);
           
-          console.log('✅ Файл успешно загружен, получен URL:', photoURL);
+          console.log('✅ Файл обработан, получен URL:', photoURL);
         } catch (uploadError) {
-          console.error('❌ Ошибка при загрузке файла:', uploadError);
-          alert('Произошла ошибка при загрузке фото. Профиль будет создан без фотографии.');
+          console.error('❌ Ошибка при обработке файла:', uploadError);
+          alert('Произошла ошибка при обработке фото. Профиль будет создан без фотографии.');
           photoURL = null;
         }
       }

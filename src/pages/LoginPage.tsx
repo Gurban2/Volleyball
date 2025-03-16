@@ -1,23 +1,27 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FiLogIn, FiAlertCircle, FiInfo } from 'react-icons/fi';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, authError } = useAuth();
+  
+  // Получаем информационное сообщение из URL параметров (если есть)
+  const searchParams = new URLSearchParams(location.search);
+  const infoMessage = searchParams.get('message');
+  
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(
-    "ВНИМАНИЕ: Firebase отключен! Используйте email: admin@example.com для входа как админ, organizer@example.com для входа как организатор, или любой другой email для обычного пользователя."
-  );
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -96,7 +100,7 @@ const LoginPage: React.FC = () => {
           <Button
             type="submit"
             variant="primary"
-            fullWidth
+            isFullWidth
             disabled={isLoading}
           >
             {isLoading ? 'Вход...' : 'Войти'}
@@ -178,7 +182,7 @@ const ErrorMessage = styled.div`
   gap: ${({ theme }) => theme.space.xs};
   padding: ${({ theme }) => theme.space.md};
   border-radius: ${({ theme }) => theme.radii.md};
-  background-color: ${({ theme }) => theme.colors.dangerLight};
+  background-color: ${({ theme }) => theme.colors.danger}20;
   color: ${({ theme }) => theme.colors.danger};
   margin-bottom: ${({ theme }) => theme.space.lg};
   
@@ -193,8 +197,8 @@ const InfoMessage = styled.div`
   gap: ${({ theme }) => theme.space.xs};
   padding: ${({ theme }) => theme.space.md};
   border-radius: ${({ theme }) => theme.radii.md};
-  background-color: ${({ theme }) => theme.colors.infoLight};
-  color: ${({ theme }) => theme.colors.info};
+  background-color: ${({ theme }) => theme.colors.primary}20;
+  color: ${({ theme }) => theme.colors.primary};
   margin-bottom: ${({ theme }) => theme.space.lg};
   
   svg {

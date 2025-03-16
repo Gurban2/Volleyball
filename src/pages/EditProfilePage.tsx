@@ -4,15 +4,7 @@ import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiUser, FiArrowLeft, FiUpload, FiShield, FiWifi, FiWifiOff, FiAlertTriangle } from 'react-icons/fi';
 import Button from '../components/ui/Button';
-import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadFile } from '../firebase/uploadHelpers';
-import { 
-  checkFirestoreConnection, 
-  toggleNetworkMode, 
-  forceOnline, 
-  isNetworkOnline 
-} from '../firebase/config';
 
 interface UserProfile {
   id: string;
@@ -29,6 +21,45 @@ const MOCK_USER_PROFILE: UserProfile = {
   email: 'ivan@example.com',
   phone: '+7 (999) 123-45-67',
   avatar: null,
+};
+
+// Стилизованные компоненты для отображения загрузки
+const LoadingContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 50vh;
+  gap: ${({ theme }) => theme.space.md};
+`;
+
+const LoadingSpinner = styled.div`
+  border: 4px solid ${({ theme }) => theme.colors.backgroundDark};
+  border-top: 4px solid ${({ theme }) => theme.colors.primary};
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+const LoadingText = styled.div`
+  color: ${({ theme }) => theme.colors.textSecondary};
+  font-size: ${({ theme }) => theme.fontSizes.md};
+`;
+
+// Замена функции проверки подключения к Firebase на простую проверку интернета
+const checkInternetConnection = async (): Promise<boolean> => {
+  try {
+    await fetch('/api/health', { method: 'HEAD' });
+    return true;
+  } catch (error) {
+    return false;
+  }
 };
 
 const EditProfilePage: React.FC = () => {
@@ -80,7 +111,7 @@ const EditProfilePage: React.FC = () => {
   useEffect(() => {
     const checkNetworkStatus = async () => {
       try {
-        const connectionStatus = await checkFirestoreConnection();
+        const connectionStatus = await checkInternetConnection();
         setIsOnline(connectionStatus);
         console.log('Начальный статус сети:', connectionStatus ? 'онлайн' : 'офлайн');
       } catch (error) {
@@ -152,21 +183,18 @@ const EditProfilePage: React.FC = () => {
     try {
       let photoURL = userData?.photoURL || null;
       
-      // Загрузка фотографии в Firebase Storage, если она была изменена
+      // Обработка фотографии, если она была изменена
       if (formData.avatar) {
         try {
-          console.log('🔄 Начинаем загрузку фото...');
+          console.log('🔄 Обработка фото...');
           
-          // Используем функцию загрузки из uploadHelpers
-          photoURL = await uploadFile(
-            formData.avatar, 
-            `user-avatars/${currentUser.uid}`
-          );
+          // Просто создаем локальный URL для аватара
+          photoURL = URL.createObjectURL(formData.avatar);
           
-          console.log('✅ Файл успешно загружен, получен URL:', photoURL);
+          console.log('✅ Файл обработан, получен URL:', photoURL);
         } catch (uploadError) {
-          console.error('❌ Ошибка при загрузке файла:', uploadError);
-          alert('Произошла ошибка при загрузке фото. Пожалуйста, попробуйте позже.');
+          console.error('❌ Ошибка при обработке файла:', uploadError);
+          alert('Произошла ошибка при обработке фото. Пожалуйста, попробуйте позже.');
           
           // Продолжаем сохранять профиль с предыдущим фото
           console.log('Продолжаем сохранение профиля с текущим фото');
@@ -298,22 +326,6 @@ const EditProfilePage: React.FC = () => {
         <PageTitle>Редактирование профиля</PageTitle>
       </Header>
 
-      <NetworkStatusBar online={isOnline}>
-        <NetworkStatusIcon>
-          {isOnline ? <FiWifi size={18} /> : <FiWifiOff size={18} />}
-        </NetworkStatusIcon>
-        <NetworkStatusText>
-          {isOnline 
-            ? 'Онлайн режим: подключение к Firebase установлено' 
-            : 'Офлайн режим: нет подключения к Firebase'}
-        </NetworkStatusText>
-        {!isOnline && (
-          <NetworkWarningIcon>
-            <FiAlertTriangle size={18} />
-          </NetworkWarningIcon>
-        )}
-      </NetworkStatusBar>
-
       <FormContainer
         as={motion.form}
         onSubmit={handleSubmit}
@@ -399,102 +411,6 @@ const EditProfilePage: React.FC = () => {
             Роли определяют ваши возможности в приложении. Выберите роль, соответствующую вашим потребностям:
           </InfoText>
 
-          <ConnectSection>
-            <ConnectButtons>
-              <ConnectButton 
-                type="button"
-                variant="outlined"
-                onClick={async () => {
-                  try {
-                    const isConnected = await checkFirestoreConnection();
-                    if (isConnected) {
-                      setIsOnline(true);
-                      alert('Подключение к Firebase установлено успешно!');
-                    } else {
-                      setIsOnline(false);
-                      alert('Не удалось подключиться к Firebase. Проверьте интернет-соединение.');
-                    }
-                  } catch (error: any) {
-                    setIsOnline(false);
-                    alert(`Ошибка проверки подключения: ${error.message}`);
-                  }
-                }}
-                leftIcon={<FiWifi />}
-              >
-                Проверить подключение
-              </ConnectButton>
-              
-              <ConnectButton 
-                type="button"
-                variant={isOnline ? "danger" : "success"}
-                onClick={async () => {
-                  try {
-                    const newState = !isOnline;
-                    const success = await toggleNetworkMode(newState);
-                    if (success) {
-                      setIsOnline(newState);
-                      alert(`${newState ? 'Онлайн' : 'Офлайн'}-режим успешно включен`);
-                    }
-                  } catch (error: any) {
-                    alert(`Ошибка переключения режима: ${error.message}`);
-                  }
-                }}
-                leftIcon={isOnline ? <FiWifiOff /> : <FiWifi />}
-              >
-                {isOnline ? 'Перейти в офлайн-режим' : 'Перейти в онлайн-режим'}
-              </ConnectButton>
-              
-              <ConnectButton 
-                type="button" 
-                variant="primary"
-                onClick={async () => {
-                  try {
-                    alert('Запуск процедуры восстановления соединения...');
-                    
-                    // Деактивируем и затем активируем сеть
-                    await toggleNetworkMode(false);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // Принудительное подключение с несколькими попытками
-                    const success = await forceOnline();
-                    
-                    if (success) {
-                      // Дополнительная проверка реального подключения
-                      const connectionOk = await checkFirestoreConnection();
-                      setIsOnline(connectionOk);
-                      
-                      if (connectionOk) {
-                        alert('Подключение к Firebase полностью восстановлено! Теперь вы можете изменять роли и работать с базой данных.');
-                      } else {
-                        alert('Частичное восстановление подключения. Повторите попытку еще раз.');
-                      }
-                    } else {
-                      alert('Не удалось восстановить подключение. Попробуйте перезагрузить страницу или приложение.');
-                      setIsOnline(false);
-                    }
-                  } catch (error: any) {
-                    alert(`Ошибка при восстановлении подключения: ${error.message}`);
-                    console.error('Ошибка при восстановлении подключения:', error);
-                  }
-                }}
-                leftIcon={<FiWifi />}
-              >
-                Принудительно восстановить подключение
-              </ConnectButton>
-            </ConnectButtons>
-            
-            <ConnectionInfo>
-              {isOnline 
-                ? 'Вы находитесь в онлайн-режиме. Все функции доступны.' 
-                : 'Если вы испытываете проблемы с изменением роли, попробуйте проверить подключение к серверу.'}
-              {!isOnline && (
-                <ConnectionWarning>
-                  Вы находитесь в офлайн-режиме! Изменение ролей недоступно.
-                </ConnectionWarning>
-              )}
-            </ConnectionInfo>
-          </ConnectSection>
-          
           <RoleContainer>
             <RoleOption>
               <RoleOptionTitle isActive={userData?.role === 'user'}>Пользователь</RoleOptionTitle>
@@ -513,7 +429,7 @@ const EditProfilePage: React.FC = () => {
                   type="button"
                   onClick={makeUserOrganizer}
                   leftIcon={<FiShield />}
-                  variant="success"
+                  variant="primary"
                   disabled={isSaving}
                 >
                   Стать организатором
@@ -770,11 +686,12 @@ const FormActions = styled.div`
 
 const AdminButton = styled(Button)`
   background-color: ${({ theme, disabled }) => 
-    disabled ? theme.colors.textTertiary : theme.colors.warning};
+    disabled ? theme.colors.textTertiary : theme.colors.danger};
   color: white;
   
   &:hover:not(:disabled) {
-    background-color: ${({ theme }) => theme.colors.warningDark};
+    background-color: ${({ theme }) => theme.colors.danger};
+    opacity: 0.9;
   }
 `;
 
@@ -782,92 +699,6 @@ const RoleButton = styled(Button)`
   &:hover:not(:disabled) {
     opacity: 0.9;
   }
-`;
-
-const LoadingContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 50vh;
-  gap: ${({ theme }) => theme.space.md};
-`;
-
-const LoadingSpinner = styled.div`
-  border: 4px solid ${({ theme }) => theme.colors.backgroundDark};
-  border-top: 4px solid ${({ theme }) => theme.colors.primary};
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
-
-const LoadingText = styled.div`
-  color: ${({ theme }) => theme.colors.textSecondary};
-  font-size: ${({ theme }) => theme.fontSizes.md};
-`;
-
-const ConnectionInfo = styled.p`
-  font-size: ${({ theme }) => theme.fontSizes.xs};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  margin-top: ${({ theme }) => theme.space.xs};
-`;
-
-const ConnectSection = styled.div`
-  margin-bottom: ${({ theme }) => theme.space.xl};
-  padding: ${({ theme }) => theme.space.md};
-  background-color: ${({ theme }) => theme.colors.backgroundDark};
-  border-radius: ${({ theme }) => theme.radii.md};
-`;
-
-const ConnectButtons = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: ${({ theme }) => theme.space.sm};
-  margin-bottom: ${({ theme }) => theme.space.sm};
-`;
-
-const ConnectButton = styled(Button)`
-  margin-bottom: ${({ theme }) => theme.space.xs};
-`;
-
-const ConnectionWarning = styled.p`
-  font-size: ${({ theme }) => theme.fontSizes.sm};
-  color: ${({ theme }) => theme.colors.danger};
-  font-weight: ${({ theme }) => theme.fontWeights.bold};
-  margin-top: ${({ theme }) => theme.space.xs};
-`;
-
-const NetworkStatusBar = styled.div<{ online: boolean }>`
-  display: flex;
-  align-items: center;
-  padding: ${({ theme }) => theme.space.sm};
-  background-color: ${({ online, theme }) => 
-    online ? theme.colors.success + '20' : theme.colors.danger + '20'};
-  border-radius: ${({ theme }) => theme.radii.md};
-  margin-bottom: ${({ theme }) => theme.space.md};
-`;
-
-const NetworkStatusIcon = styled.div`
-  margin-right: ${({ theme }) => theme.space.sm};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const NetworkStatusText = styled.span`
-  flex: 1;
-`;
-
-const NetworkWarningIcon = styled.span`
-  display: flex;
-  align-items: center;
-  margin-left: ${({ theme }) => theme.space.sm};
 `;
 
 export default EditProfilePage;

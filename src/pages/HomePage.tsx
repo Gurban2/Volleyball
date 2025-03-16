@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
@@ -6,8 +6,21 @@ import { FiCalendar, FiMapPin, FiUsers, FiAward } from 'react-icons/fi';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 
+// Define an interface for featured games
+interface FeaturedGame {
+  id: string;
+  title: string;
+  location: string;
+  date: string;
+  time: string;
+  spotsAvailable: number;
+}
+
 const HomePage: React.FC = () => {
   const { currentUser, userData, isAdmin, isOrganizer } = useAuth();
+  const [featuredGames, setFeaturedGames] = useState<FeaturedGame[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Функция для проверки, может ли пользователь создавать игры
   const canCreateGame = () => {
@@ -26,33 +39,49 @@ const HomePage: React.FC = () => {
     });
   }, [currentUser, userData]);
   
-  // Sample data for demonstration
-  const featuredGames = [
-    {
-      id: '1',
-      title: 'Weekly Volleyball Game',
-      location: 'Central Park, New York',
-      date: 'July 15, 2023',
-      time: '6:00 PM - 8:00 PM',
-      spotsAvailable: 5,
-    },
-    {
-      id: '2',
-      title: 'Beach Volleyball Tournament',
-      location: 'Venice Beach, Los Angeles',
-      date: 'July 22, 2023',
-      time: '10:00 AM - 4:00 PM',
-      spotsAvailable: 8,
-    },
-    {
-      id: '3',
-      title: 'Volleyball Training Session',
-      location: 'Sports Center, Chicago',
-      date: 'July 18, 2023',
-      time: '7:00 PM - 9:00 PM',
-      spotsAvailable: 10,
-    },
-  ];
+  // Fetch featured games from API
+  useEffect(() => {
+    const fetchFeaturedGames = async () => {
+      try {
+        setLoading(true);
+        
+        // Make API call to fetch games - we'll get all and take the first 3 as featured
+        const response = await fetch('http://localhost:3000/api/games');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const gamesData = await response.json() as any[];
+        console.log('Games data for homepage:', gamesData);
+        
+        // Transform and limit to 3 featured games
+        const transformedGames: FeaturedGame[] = gamesData
+          .slice(0, 3) // Take only first 3 games
+          .map((gameData: any) => ({
+            id: gameData.id,
+            title: gameData.name || gameData.title || 
+              (gameData.homeTeam && gameData.awayTeam 
+                ? `${gameData.homeTeam.name} vs ${gameData.awayTeam.name}` 
+                : 'Игра без названия'),
+            location: gameData.location || '',
+            date: gameData.date || '',
+            time: gameData.time || '',
+            spotsAvailable: gameData.availableSpots || 
+              (gameData.capacity - (gameData.participants?.length || 0)) || 0,
+          }));
+        
+        setFeaturedGames(transformedGames);
+      } catch (err) {
+        console.error('Error fetching featured games:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load featured games');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFeaturedGames();
+  }, []);
 
   return (
     <PageContainer>
@@ -169,41 +198,56 @@ const HomePage: React.FC = () => {
             </ViewAllLink>
           </SectionHeader>
 
-          <GamesGrid>
-            {featuredGames.map((game) => (
-              <GameCard
-                key={game.id}
-                as={motion.div}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
-              >
-                <GameCardContent>
-                  <GameTitle>{game.title}</GameTitle>
-                  <GameLocation>
-                    <FiMapPin /> {game.location}
-                  </GameLocation>
-                  <GameDate>
-                    <FiCalendar /> {game.date}, {game.time}
-                  </GameDate>
-                  <GameSpots>
-                    <FiUsers /> {game.spotsAvailable} spots available
-                  </GameSpots>
-                  <GameCardActions>
-                    <Button
-                      as={Link}
-                      to={`/games/${game.id}`}
-                      variant="outlined"
-                      size="small"
-                      isFullWidth
-                    >
-                      View Details
-                    </Button>
-                  </GameCardActions>
-                </GameCardContent>
-              </GameCard>
-            ))}
-          </GamesGrid>
+          {loading ? (
+            <LoadingContainer>
+              <LoadingText>Loading featured games...</LoadingText>
+            </LoadingContainer>
+          ) : error ? (
+            <ErrorContainer>
+              <ErrorText>{error}</ErrorText>
+            </ErrorContainer>
+          ) : featuredGames.length > 0 ? (
+            <GamesGrid>
+              {featuredGames.map((game) => (
+                <GameCard
+                  key={game.id}
+                  as={motion.div}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <GameCardContent>
+                    <GameTitle>{game.title}</GameTitle>
+                    <GameLocation>
+                      <FiMapPin /> {game.location}
+                    </GameLocation>
+                    <GameDate>
+                      <FiCalendar /> {game.date}, {game.time}
+                    </GameDate>
+                    <GameSpots>
+                      <FiUsers /> {game.spotsAvailable} spots available
+                    </GameSpots>
+                    <GameCardActions>
+                      <Button
+                        as={Link}
+                        to={`/games/${game.id}`}
+                        variant="outlined"
+                        size="small"
+                        isFullWidth
+                      >
+                        View Details
+                      </Button>
+                    </GameCardActions>
+                  </GameCardContent>
+                </GameCard>
+              ))}
+            </GamesGrid>
+          ) : (
+            <NoGamesContainer>
+              <NoGamesText>No featured games available at the moment.</NoGamesText>
+              <Button as={Link} to="/games" variant="primary">Browse All Games</Button>
+            </NoGamesContainer>
+          )}
         </div>
       </FeaturedGamesSection>
 
@@ -515,6 +559,51 @@ const CTAButtons = styled.div`
   gap: ${({ theme }) => theme.space.md};
   justify-content: center;
   flex-wrap: wrap;
+`;
+
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+`;
+
+const LoadingText = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.lg};
+  font-weight: ${({ theme }) => theme.fontWeights.bold};
+  color: ${({ theme }) => theme.colors.textPrimary};
+`;
+
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  gap: ${({ theme }) => theme.space.md};
+`;
+
+const ErrorText = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.lg};
+  font-weight: ${({ theme }) => theme.fontWeights.bold};
+  color: ${({ theme }) => theme.colors.danger};
+  text-align: center;
+`;
+
+const NoGamesContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  gap: ${({ theme }) => theme.space.lg};
+`;
+
+const NoGamesText = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.lg};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  text-align: center;
 `;
 
 export default HomePage; 

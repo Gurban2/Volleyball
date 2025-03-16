@@ -28,51 +28,8 @@ interface GameDetails {
   participants: Participant[];
 }
 
-// Mock data for demonstration
-const MOCK_GAME_DETAILS: GameDetails = {
-  id: '1',
-  title: 'Weekly Volleyball Game',
-  description: 'Join us for our weekly volleyball game. This game is suitable for players of all skill levels. We will divide into teams on-site. Please bring appropriate sports attire and footwear. Water and light snacks will be provided by the organizers.',
-  location: 'Olympus Sports Center, 123 Main St, New York',
-  date: 'June 15, 2023',
-  time: '6:00 PM - 8:00 PM',
-  format: 'Round Robin',
-  totalSpots: 12,
-  availableSpots: 5,
-  imageUrl: '/images/hq720.jpg',
-  organizer: {
-    id: 'org1',
-    name: 'John Smith',
-    avatar: '/images/default-avatar.jpg',
-  },
-  participants: [
-    {
-      id: 'org1',
-      name: 'John Smith',
-      avatar: '/images/default-avatar.jpg',
-      spots: 1,
-      isOrganizer: true, // For demonstrating organizer functionality
-    },
-    {
-      id: 'p1',
-      name: 'Emily Johnson',
-      avatar: '/images/emily.jpg',
-      spots: 2,
-    },
-    {
-      id: 'p2',
-      name: 'Michael Brown',
-      avatar: '/images/michael.jpg',
-      spots: 1,
-    },
-    {
-      id: 'p3',
-      name: 'Sarah Davis',
-      avatar: '/images/sarah.jpg',
-      spots: 3,
-    },
-  ],
-};
+// Empty game details template instead of mock data
+const MOCK_GAME_DETAILS: GameDetails | null = null;
 
 const GameDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -81,16 +38,66 @@ const GameDetailsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate API call to get game details
-    setLoading(true);
-    setTimeout(() => {
-      if (id === '1') {
-        setGame(MOCK_GAME_DETAILS);
-      } else {
-        setError('Game not found');
+    const fetchGameDetails = async () => {
+      if (!id) {
+        setError('Game ID is missing');
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-    }, 500);
+
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Make API call to fetch game details
+        // Если id не начинается с "game", добавляем префикс "game"
+        const apiId = id.startsWith('game') ? id : `game${id}`;
+        const response = await fetch(`http://localhost:3000/api/games/${apiId}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const gameData = await response.json();
+        console.log('Game data from API:', gameData);
+        
+        // Transform the API response to match our GameDetails type if needed
+        // This may need to be adjusted based on your actual API response structure
+        const transformedData: GameDetails = {
+          id: gameData.id,
+          title: gameData.name || gameData.title,
+          description: gameData.description || '',
+          location: gameData.location || '',
+          date: gameData.date || '',
+          time: gameData.time || '',
+          format: gameData.format || 'Unknown',
+          totalSpots: gameData.totalSpots || gameData.capacity || 0,
+          availableSpots: gameData.availableSpots || (gameData.capacity - (gameData.participants?.length || 0)) || 0,
+          imageUrl: gameData.imageUrl,
+          organizer: {
+            id: gameData.organizer?.id || 'unknown',
+            name: gameData.organizer?.name || 'Unknown Organizer',
+            avatar: gameData.organizer?.avatar,
+          },
+          participants: (gameData.participants || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            avatar: p.avatar,
+            spots: p.spots || 1,
+            isOrganizer: p.isOrganizer || p.id === gameData.organizer?.id,
+          })),
+        };
+        
+        setGame(transformedData);
+      } catch (err) {
+        console.error('Error fetching game details:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load game details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGameDetails();
   }, [id]);
 
   const handleBookingSubmit = (data: BookingFormData) => {

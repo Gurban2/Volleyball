@@ -24,69 +24,8 @@ interface Game {
   };
 }
 
-// Mock data for demonstration
-const MOCK_GAMES: Game[] = [
-  {
-    id: '1',
-    title: 'Weekly Volleyball Game',
-    description: 'Join us for our weekly volleyball game. All skill levels welcome!',
-    location: 'Central Park, New York',
-    date: 'July 15, 2023',
-    time: '6:00 PM - 8:00 PM',
-    format: 'Friendly Game',
-    totalSpots: 12,
-    availableSpots: 5,
-    imageUrl: '/images/23.webp',
-    organizer: {
-      name: 'John Smith',
-    },
-  },
-  {
-    id: '2',
-    title: 'Beach Volleyball Tournament',
-    description: 'Beach volleyball tournament with prizes for the winners!',
-    location: 'Venice Beach, Los Angeles',
-    date: 'July 22, 2023',
-    time: '10:00 AM - 4:00 PM',
-    format: 'Tournament',
-    totalSpots: 24,
-    availableSpots: 8,
-    imageUrl: '/images/crop.webp',
-    organizer: {
-      name: 'Sarah Johnson',
-    },
-  },
-  {
-    id: '3',
-    title: 'Volleyball Training Session',
-    description: 'Improve your skills with professional coaches. Focus on serves and reception.',
-    location: 'Sports Center, Chicago',
-    date: 'July 18, 2023',
-    time: '7:00 PM - 9:00 PM',
-    format: 'Training',
-    totalSpots: 16,
-    availableSpots: 10,
-    imageUrl: '/images/hq720.jpg',
-    organizer: {
-      name: 'Michael Brown',
-    },
-  },
-  {
-    id: '4',
-    title: 'Corporate Volleyball Tournament',
-    description: 'Annual corporate volleyball tournament between local companies.',
-    location: 'Corporate Park, Houston',
-    date: 'July 29, 2023',
-    time: '1:00 PM - 7:00 PM',
-    format: 'Tournament',
-    totalSpots: 36,
-    availableSpots: 0,
-    imageUrl: '/images/image1.jpg',
-    organizer: {
-      name: 'Corporate Sports Inc.',
-    },
-  },
-];
+// Empty array instead of mock data
+const MOCK_GAMES: Game[] = [];
 
 interface GamesFilters {
   location: string;
@@ -111,12 +50,51 @@ const GamesPage: React.FC = () => {
   });
 
   useEffect(() => {
-    // Simulate API call to fetch games
-    setIsLoading(true);
-    setTimeout(() => {
-      setGames(MOCK_GAMES);
-      setIsLoading(false);
-    }, 800);
+    const fetchGames = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        // Make API call to fetch all games
+        const response = await fetch('http://localhost:3000/api/games');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const gamesData = await response.json();
+        console.log('Games data from API:', gamesData);
+        
+        // Transform the API response to match our Game type
+        const transformedGames: Game[] = gamesData.map((gameData: any) => ({
+          id: gameData.id,
+          title: gameData.name || gameData.title || 
+            (gameData.homeTeam && gameData.awayTeam 
+              ? `${gameData.homeTeam.name} vs ${gameData.awayTeam.name}` 
+              : 'Игра без названия'),
+          description: gameData.description || '',
+          location: gameData.location || '',
+          date: gameData.date || '',
+          time: gameData.time || '',
+          format: gameData.format || 'Unknown',
+          totalSpots: gameData.totalSpots || gameData.capacity || 0,
+          availableSpots: gameData.availableSpots || (gameData.capacity - (gameData.participants?.length || 0)) || 0,
+          imageUrl: gameData.imageUrl,
+          organizer: {
+            name: gameData.organizer?.name || 'Unknown Organizer',
+          },
+        }));
+        
+        setGames(transformedGames);
+      } catch (err) {
+        console.error('Error fetching games:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load games');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchGames();
   }, []);
 
   const toggleFilters = () => {

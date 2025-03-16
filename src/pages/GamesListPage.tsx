@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { FiFilter, FiSearch } from 'react-icons/fi';
@@ -7,79 +7,10 @@ import GameCard, { GameCardProps } from '../components/ui/GameCard';
 import GameFilters from '../components/ui/GameFilters';
 
 
-const GAMES_DATA: GameCardProps[] = [
-  {
-    id: '1',
-    title: 'Weekly Volleyball Game',
-    location: 'Olympus Sports Center, New York',
-    date: 'June 15, 2023',
-    time: '6:00 PM - 8:00 PM',
-    format: 'Round Robin',
-    totalSpots: 12,
-    availableSpots: 5,
-    imageUrl: '/images/23.webp',
-  },
-  {
-    id: '2',
-    title: 'Beach Volleyball Tournament',
-    location: 'Sunny Beach, Miami',
-    date: 'June 20, 2023',
-    time: '10:00 AM - 4:00 PM',
-    format: 'Single Elimination',
-    totalSpots: 16,
-    availableSpots: 8,
-    imageUrl: '/images/hq720.jpg',
-    
-  },
-  {
-    id: '3',
-    title: 'Corporate Tournament',
-    location: 'Dynamo Sports Complex, Chicago',
-    date: 'June 25, 2023',
-    time: '12:00 PM - 6:00 PM',
-    format: 'Double Elimination',
-    totalSpots: 24,
-    availableSpots: 0,
-    imageUrl: '/images/hq720.jpg',
-
-  },
-  {
-    id: '4',
-    title: 'Mixed Doubles Tournament',
-    location: 'Central Park, San Francisco',
-    date: 'July 1, 2023',
-    time: '9:00 AM - 3:00 PM',
-    format: 'Round Robin',
-    totalSpots: 16,
-    availableSpots: 2,
-    imageUrl: '/images/23.webp',
-   
-  },
-  {
-    id: '5',
-    title: 'Recreational Evening Game',
-    location: 'Sportplace Arena, Los Angeles',
-    date: 'July 5, 2023',
-    time: '7:00 PM - 9:00 PM',
-    format: 'Friendly Match',
-    totalSpots: 12,
-    availableSpots: 6,
-    imageUrl: '/images/23.webp',
-  },
-  {
-    id: '6',
-    title: 'Pro-Amateur Championship',
-    location: 'Victory Hall, Boston',
-    date: 'July 10, 2023',
-    time: '2:00 PM - 8:00 PM',
-    format: 'Double Elimination',
-    totalSpots: 32,
-    availableSpots: 12,
-    imageUrl: '/images/23.webp',
-  },
-];
-
 const GamesListPage: React.FC = () => {
+  const [games, setGames] = useState<GameCardProps[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
@@ -90,8 +21,57 @@ const GamesListPage: React.FC = () => {
     availableSpotsOnly: false,
   });
 
+  // Fetch games data from the API
+  useEffect(() => {
+    const fetchGames = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Make API call to fetch all games
+        const response = await fetch('http://localhost:3000/api/games');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const gamesData = await response.json() as any[];
+        console.log('Games data from API:', gamesData);
+        
+        // Transform the API response to match our GameCardProps type
+        const transformedGames: GameCardProps[] = gamesData.map((gameData: any) => ({
+          id: gameData.id,
+          title: gameData.name || gameData.title || 
+            (gameData.homeTeam && gameData.awayTeam 
+              ? `${gameData.homeTeam.name} vs ${gameData.awayTeam.name}` 
+              : 'Игра без названия'),
+          location: gameData.location || '',
+          date: gameData.date || '',
+          time: gameData.time || '',
+          format: gameData.format || 'Unknown',
+          totalSpots: gameData.totalSpots || gameData.capacity || 0,
+          availableSpots: gameData.availableSpots || (gameData.capacity - (gameData.participants?.length || 0)) || 0,
+          imageUrl: gameData.imageUrl,
+          organizer: gameData.organizer ? {
+            name: gameData.organizer.name || 'Unknown Organizer',
+            avatar: gameData.organizer.avatar,
+          } : undefined,
+        }));
+        
+        setGames(transformedGames);
+      } catch (err) {
+        console.error('Error fetching games:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load games');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGames();
+  }, []);
+
   // Filter games based on search and filters
-  const filteredGames = GAMES_DATA.filter(game => {
+  const filteredGames = games.filter(game => {
     const matchesSearch = game.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         game.location.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -246,7 +226,18 @@ const GamesListPage: React.FC = () => {
             Found {filteredGames.length} games
           </ResultsCount>
 
-          {filteredGames.length > 0 ? (
+          {loading ? (
+            <LoadingContainer>
+              <LoadingMessage>Loading games...</LoadingMessage>
+            </LoadingContainer>
+          ) : error ? (
+            <ErrorContainer>
+              <ErrorMessage>{error}</ErrorMessage>
+              <Button variant="primary" onClick={() => window.location.reload()}>
+                Try Again
+              </Button>
+            </ErrorContainer>
+          ) : filteredGames.length > 0 ? (
             <GamesGrid>
               {filteredGames.map(game => (
                 <GameCardWrapper
@@ -402,6 +393,34 @@ const NoResults = styled.div`
 const NoResultsText = styled.p`
   font-size: ${({ theme }) => theme.fontSizes.lg};
   color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+`;
+
+const LoadingMessage = styled.div`
+  font-size: ${({ theme }) => theme.fontSizes.xl};
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: ${({ theme }) => theme.space.lg};
+  min-height: 300px;
+`;
+
+const ErrorMessage = styled.div`
+  font-size: ${({ theme }) => theme.fontSizes.xl};
+  color: ${({ theme }) => theme.colors.danger};
+  text-align: center;
+  margin-bottom: ${({ theme }) => theme.space.md};
 `;
 
 export default GamesListPage; 

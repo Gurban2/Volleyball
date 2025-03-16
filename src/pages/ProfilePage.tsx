@@ -6,7 +6,7 @@ import { FiUser, FiMail, FiPhone, FiEdit, FiCalendar, FiMapPin, FiClock } from '
 import Button from '../components/ui/Button';
 import { GameCardProps } from '../components/ui/GameCard';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase/config';
+
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 interface UserProfile {
@@ -43,67 +43,142 @@ const ProfilePage: React.FC = () => {
     }
   }, [currentUser, userData]);
   
-  // Заменяем на локальную заглушку вместо запросов к Firestore
+  // Получение списка игр с сервера
   const fetchUserGames = async () => {
     try {
-      console.log(`🔄 Симуляция запроса игр пользователя ${currentUser?.uid}`);
+      setLoading(true);
+      console.log(`🔄 Получение игр пользователя ${currentUser?.uid}`);
       
-      // Имитация задержки загрузки
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Используем полный URL к серверу
+      const response = await fetch('http://localhost:3000/api/games');
       
-      // Моковые данные для отображения
-      const mockUpcomingGames: GameCardProps[] = [
-        {
-          id: '1',
-          title: 'Пляжный волейбол',
-          location: 'Пляж "Ривьера"',
-          date: '2025-06-15',
-          time: '17:00',
-          format: 'friendly',
-          spotsTotal: 16,
-          spotsTaken: 12,
-          imageUrl: 'https://via.placeholder.com/800x450?text=Пляжный+волейбол'
-        },
-        {
-          id: '2',
-          title: 'Волейбольный турнир',
-          location: 'Спортивный комплекс',
-          date: '2025-06-25',
-          time: '10:00',
-          format: 'tournament',
-          spotsTotal: 24,
-          spotsTaken: 16,
-          imageUrl: 'https://via.placeholder.com/800x450?text=Волейбольный+турнир'
+      if (!response.ok) {
+        throw new Error(`HTTP ошибка! статус: ${response.status}`);
+      }
+      
+      // Приводим ответ к правильному типу
+      const gamesData = await response.json() as any[]; 
+      console.log('Данные с сервера:', gamesData);
+      
+      const currentDate = new Date();
+      const upcoming: GameCardProps[] = [];
+      const past: GameCardProps[] = [];
+      
+      // Обрабатываем полученные игры
+      gamesData.forEach((game) => {
+        const gameDate = new Date(game.date);
+        
+        // Формируем заголовок игры на основе команд или названия
+        const gameTitle = game.name || 
+          (game.homeTeam && game.awayTeam 
+            ? `${game.homeTeam.name} vs ${game.awayTeam.name}` 
+            : 'Игра без названия');
+
+        // Преобразуем серверные данные в формат GameCardProps с правильными полями
+        const gameCard: any = {
+          id: game.id,
+          title: gameTitle,
+          location: game.location,
+          date: game.date,
+          time: game.time,
+          format: game.format || 'friendly',
+          totalSpots: game.spotsTotal || 10,
+          availableSpots: (game.spotsTotal || 10) - (game.spotsTaken || 0),
+          imageUrl: game.imageUrl || '/images/placeholders/default-game.jpg'
+        };
+        
+        // Распределяем по категориям
+        if (gameDate > currentDate) {
+          upcoming.push(gameCard);
+        } else {
+          past.push(gameCard);
         }
-      ];
+      });
       
-      const mockPastGames: GameCardProps[] = [
-        {
-          id: '3',
-          title: 'Товарищеский матч',
-          location: 'Волейбольный центр',
-          date: '2023-05-10',
-          time: '18:30',
-          format: 'friendly',
-          spotsTotal: 12,
-          spotsTaken: 12,
-          imageUrl: 'https://via.placeholder.com/800x450?text=Товарищеский+матч'
-        }
-      ];
+      setUpcomingGames(upcoming);
+      setPastGames(past);
       
-      setUpcomingGames(mockUpcomingGames);
-      setPastGames(mockPastGames);
-      
-      // Обновляем статистику
+      // Обновляем статистику на основе реальных данных
       setStats({
-        gamesCreated: 3,
-        gamesParticipated: 8,
-        upcomingGames: mockUpcomingGames.length
+        gamesCreated: upcoming.length + past.length,
+        gamesParticipated: 8, // В будущем можно получать из API
+        upcomingGames: upcoming.length
       });
       
       setLoading(false);
     } catch (error) {
-      console.error("❌ Ошибка при получении игр пользователя:", error);
+      console.error("❌ Ошибка при получении игр:", error);
+      
+      // В случае ошибки подключения, попробуем другой URL или порт
+      try {
+        console.log('🔄 Пробуем альтернативный URL для API...');
+        const alternativeResponse = await fetch('http://localhost:3000/api/games');
+        
+        if (alternativeResponse.ok) {
+          const gamesData = await alternativeResponse.json() as any[];
+          console.log('Данные с альтернативного URL:', gamesData);
+          
+          const upcoming = gamesData
+            .filter(game => new Date(game.date) > new Date())
+            .map(game => ({
+              id: game.id,
+              title: game.name || 'Неизвестная игра',
+              location: game.location,
+              date: game.date,
+              time: game.time,
+              format: game.format || 'friendly',
+              totalSpots: game.spotsTotal || 10,
+              availableSpots: (game.spotsTotal || 10) - (game.spotsTaken || 0),
+              imageUrl: game.imageUrl || '/images/placeholders/default-game.jpg'
+            }));
+            
+          const past = gamesData
+            .filter(game => new Date(game.date) <= new Date())
+            .map(game => ({
+              id: game.id,
+              title: game.name || 'Неизвестная игра',
+              location: game.location,
+              date: game.date,
+              time: game.time,
+              format: game.format || 'friendly',
+              totalSpots: game.spotsTotal || 10,
+              availableSpots: (game.spotsTotal || 10) - (game.spotsTaken || 0),
+              imageUrl: game.imageUrl || '/images/placeholders/default-game.jpg'
+            }));
+            
+          setUpcomingGames(upcoming);
+          setPastGames(past);
+          
+          setStats({
+            gamesCreated: upcoming.length + past.length,
+            gamesParticipated: 8,
+            upcomingGames: upcoming.length
+          });
+        } else {
+          // Если и запасной метод не сработал, показываем пустые данные
+          console.error('❌ Альтернативный URL тоже не работает');
+          setUpcomingGames([]);
+          setPastGames([]);
+          
+          setStats({
+            gamesCreated: 0,
+            gamesParticipated: 0,
+            upcomingGames: 0
+          });
+        }
+      } catch (fallbackError) {
+        console.error("❌ Ошибка при запасном получении игр:", fallbackError);
+        console.log("⚠️ Убедитесь, что сервер запущен на порту 3000");
+        setUpcomingGames([]);
+        setPastGames([]);
+        
+        setStats({
+          gamesCreated: 0,
+          gamesParticipated: 0,
+          upcomingGames: 0
+        });
+      }
+      
       setLoading(false);
     }
   };
