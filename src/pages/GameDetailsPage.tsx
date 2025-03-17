@@ -52,7 +52,7 @@ const GameDetailsPage: React.FC = () => {
         // Make API call to fetch game details
         // Если id не начинается с "game", добавляем префикс "game"
         const apiId = id.startsWith('game') ? id : `game${id}`;
-        const response = await fetch(`http://localhost:3000/api/games/${apiId}`);
+        const response = await fetch(`http://localhost:5000/api/games/${apiId}`);
         
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);

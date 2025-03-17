@@ -41,15 +41,24 @@ exports.registerUser = async (req, res) => {
       }
     };
 
-    jwt.sign(
-      payload, 
-      config.jwtSecret,
-      { expiresIn: '24h' },
-      (err, token) => {
-        if (err) throw err;
-        res.json({ token });
-      }
-    );
+    try {
+      const token = await new Promise((resolve, reject) => {
+        jwt.sign(
+          payload, 
+          config.jwtSecret,
+          { expiresIn: '24h' },
+          (err, token) => {
+            if (err) reject(err);
+            else resolve(token);
+          }
+        );
+      });
+      
+      res.json({ token });
+    } catch (jwtError) {
+      console.error('Ошибка при создании JWT:', jwtError);
+      res.status(500).send('Ошибка при создании токена аутентификации');
+    }
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Ошибка сервера');
@@ -83,15 +92,24 @@ exports.loginUser = async (req, res) => {
       }
     };
 
-    jwt.sign(
-      payload, 
-      config.jwtSecret,
-      { expiresIn: '24h' },
-      (err, token) => {
-        if (err) throw err;
-        res.json({ token });
-      }
-    );
+    try {
+      const token = await new Promise((resolve, reject) => {
+        jwt.sign(
+          payload, 
+          config.jwtSecret,
+          { expiresIn: '24h' },
+          (err, token) => {
+            if (err) reject(err);
+            else resolve(token);
+          }
+        );
+      });
+      
+      res.json({ token });
+    } catch (jwtError) {
+      console.error('Ошибка при создании JWT:', jwtError);
+      res.status(500).send('Ошибка при создании токена аутентификации');
+    }
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Ошибка сервера');
@@ -101,11 +119,6 @@ exports.loginUser = async (req, res) => {
 // Получение списка пользователей (только для админа)
 exports.getUsers = async (req, res) => {
   try {
-    // Проверка роли пользователя
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ msg: 'Доступ запрещен' });
-    }
-
     const users = await User.find().select('-password');
     res.json(users);
   } catch (err) {

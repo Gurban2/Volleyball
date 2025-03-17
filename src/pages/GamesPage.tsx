@@ -56,32 +56,29 @@ const GamesPage: React.FC = () => {
         setError(null);
         
         // Make API call to fetch all games
-        const response = await fetch('http://localhost:3000/api/games');
+        const response = await fetch('http://localhost:5000/api/rooms');
         
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
-        const gamesData = await response.json();
-        console.log('Games data from API:', gamesData);
+        const roomsData = await response.json();
+        console.log('Rooms data from API:', roomsData);
         
         // Transform the API response to match our Game type
-        const transformedGames: Game[] = gamesData.map((gameData: any) => ({
-          id: gameData.id,
-          title: gameData.name || gameData.title || 
-            (gameData.homeTeam && gameData.awayTeam 
-              ? `${gameData.homeTeam.name} vs ${gameData.awayTeam.name}` 
-              : 'Игра без названия'),
-          description: gameData.description || '',
-          location: gameData.location || '',
-          date: gameData.date || '',
-          time: gameData.time || '',
-          format: gameData.format || 'Unknown',
-          totalSpots: gameData.totalSpots || gameData.capacity || 0,
-          availableSpots: gameData.availableSpots || (gameData.capacity - (gameData.participants?.length || 0)) || 0,
-          imageUrl: gameData.imageUrl,
+        const transformedGames: Game[] = roomsData.map((room: any) => ({
+          id: room._id,
+          title: room.name,
+          description: room.description || '',
+          location: room.location || '',
+          date: new Date(room.time).toLocaleDateString(),
+          time: new Date(room.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          format: room.type || 'public',
+          totalSpots: room.maxPlayers || 0,
+          availableSpots: room.maxPlayers - (room.players?.length || 0) || 0,
+          imageUrl: room.imageUrl,
           organizer: {
-            name: gameData.organizer?.name || 'Unknown Organizer',
+            name: room.organizer?.username || 'Unknown Organizer',
           },
         }));
         

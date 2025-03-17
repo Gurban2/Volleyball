@@ -2,26 +2,17 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiUser, FiArrowLeft, FiUpload, FiShield, FiWifi, FiWifiOff, FiAlertTriangle } from 'react-icons/fi';
+import { FiUser, FiArrowLeft, FiUpload, FiWifi, FiWifiOff, FiAlertTriangle } from 'react-icons/fi';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 
 interface UserProfile {
   id: string;
   name: string;
-  email: string;
-  phone: string;
+  // email: string;
+  // phone: string;
   avatar: string | null;
 }
-
-// Временные данные для демонстрации
-const MOCK_USER_PROFILE: UserProfile = {
-  id: 'user1',
-  name: 'Иван Петров',
-  email: 'ivan@example.com',
-  phone: '+7 (999) 123-45-67',
-  avatar: null,
-};
 
 // Стилизованные компоненты для отображения загрузки
 const LoadingContainer = styled.div`
@@ -47,12 +38,13 @@ const LoadingSpinner = styled.div`
   }
 `;
 
-const LoadingText = styled.div`
+const LoadingText = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.lg};
   color: ${({ theme }) => theme.colors.textSecondary};
-  font-size: ${({ theme }) => theme.fontSizes.md};
+  margin-top: ${({ theme }) => theme.space.md};
 `;
 
-// Замена функции проверки подключения к Firebase на простую проверку интернета
+// Простая проверка интернет-соединения
 const checkInternetConnection = async (): Promise<boolean> => {
   try {
     await fetch('/api/health', { method: 'HEAD' });
@@ -71,21 +63,21 @@ const EditProfilePage: React.FC = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [formData, setFormData] = useState<{
     name: string;
-    email: string;
-    phone: string;
+    // email: string;
+    // phone: string;
     avatar: File | null;
     avatarPreview: string | null;
   }>({
     name: '',
-    email: '',
-    phone: '',
+    // email: '',
+    // phone: '',
     avatar: null,
     avatarPreview: null,
   });
   const [errors, setErrors] = useState<{
     name?: string;
-    email?: string;
-    phone?: string;
+    // email?: string;
+    // phone?: string;
   }>({});
 
   // Загрузка данных пользователя
@@ -95,8 +87,8 @@ const EditProfilePage: React.FC = () => {
     if (userData) {
       setFormData({
         name: userData.displayName || '',
-        email: userData.email || '',
-        phone: '',  // Предполагаем, что этого поля нет в userData
+        // email: userData.email || '',
+        // phone: '',  // Предполагаем, что этого поля нет в userData
         avatar: null,
         avatarPreview: userData.photoURL || null,
       });
@@ -113,9 +105,7 @@ const EditProfilePage: React.FC = () => {
       try {
         const connectionStatus = await checkInternetConnection();
         setIsOnline(connectionStatus);
-        console.log('Начальный статус сети:', connectionStatus ? 'онлайн' : 'офлайн');
       } catch (error) {
-        console.error('Ошибка при проверке статуса сети:', error);
         setIsOnline(false);
       }
     };
@@ -157,15 +147,15 @@ const EditProfilePage: React.FC = () => {
       newErrors.name = 'Имя обязательно для заполнения';
     }
     
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email обязателен для заполнения';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Введите корректный email';
-    }
+    // if (!formData.email.trim()) {
+    //   newErrors.email = 'Email обязателен для заполнения';
+    // } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    //   newErrors.email = 'Введите корректный email';
+    // }
     
-    if (formData.phone && !/^\+?[0-9\s\-()]{10,20}$/.test(formData.phone)) {
-      newErrors.phone = 'Введите корректный номер телефона';
-    }
+    // if (formData.phone && !/^\+?[0-9\s\-()]{10,20}$/.test(formData.phone)) {
+    //   newErrors.phone = 'Введите корректный номер телефона';
+    // }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -179,6 +169,8 @@ const EditProfilePage: React.FC = () => {
     }
     
     setIsSaving(true);
+    console.log('Начало сохранения профиля');
+    console.log('Текущее фото в userData:', userData?.photoURL);
     
     try {
       let photoURL = userData?.photoURL || null;
@@ -186,38 +178,86 @@ const EditProfilePage: React.FC = () => {
       // Обработка фотографии, если она была изменена
       if (formData.avatar) {
         try {
-          console.log('🔄 Обработка фото...');
+          console.log('Загрузка нового фото...');
           
-          // Просто создаем локальный URL для аватара
-          photoURL = URL.createObjectURL(formData.avatar);
+          // Загрузка фото через API
+          const fileFormData = new FormData();
+          fileFormData.append('file', formData.avatar);
           
-          console.log('✅ Файл обработан, получен URL:', photoURL);
+          // Добавляем путь пользователя для организации файлов
+          if (currentUser?.uid) {
+            fileFormData.append('path', `users/${currentUser.uid}`);
+          }
+          
+          const uploadResponse = await fetch('http://localhost:5000/api/users/me', {
+            method: 'POST',
+            body: fileFormData,
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+          });
+          
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json();
+            console.error('Ошибка загрузки файла:', errorData.message || 'Неизвестная ошибка');
+            throw new Error('Ошибка загрузки файла');
+          }
+          
+          const data = await uploadResponse.json();
+          console.log('Ответ сервера при загрузке файла:', data);
+          photoURL = data.fileUrl; // API возвращает URL загруженного файла
+          console.log('Новый URL фото:', photoURL);
+          
         } catch (uploadError) {
-          console.error('❌ Ошибка при обработке файла:', uploadError);
+          console.error('Ошибка при загрузке фото:', uploadError);
           alert('Произошла ошибка при обработке фото. Пожалуйста, попробуйте позже.');
-          
-          // Продолжаем сохранять профиль с предыдущим фото
-          console.log('Продолжаем сохранение профиля с текущим фото');
         }
+      } else {
+        console.log('Фото не изменено, используем существующее:', photoURL);
       }
-      
-      console.log('🔄 Сохраняем данные профиля...');
       
       // Создаем объект с новыми данными
       const updatedUserData = {
         ...userData,
         displayName: formData.name,
-        email: formData.email,
         photoURL: photoURL
       };
+      
+      console.log('Обновленные данные перед сохранением:', updatedUserData);
       
       // Сохраняем в localStorage
       localStorage.setItem('userData', JSON.stringify(updatedUserData));
       
+      // Также отправляем на сервер обновление профиля с новым изображением
+      try {
+        const updateResponse = await fetch('http://localhost:5000/api/users/me', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          },
+          body: JSON.stringify({
+            username: formData.name,
+            profileImage: photoURL // Это поле profileImage в MongoDB
+          })
+        });
+        
+        if (!updateResponse.ok) {
+          const errorData = await updateResponse.json();
+          console.error('Ошибка обновления профиля на сервере:', errorData.msg || 'Неизвестная ошибка');
+          throw new Error('Ошибка обновления профиля на сервере');
+        }
+        
+        const updatedUser = await updateResponse.json();
+        console.log('Ответ сервера после обновления профиля:', updatedUser);
+        console.log('profileImage в ответе сервера:', updatedUser.profileImage);
+      } catch (updateError) {
+        console.error('Ошибка при обновлении профиля на сервере:', updateError);
+      }
+      
       // Обновляем состояние пользователя
       await refreshUserData();
-      
-      console.log('✅ Профиль успешно сохранен');
+      console.log('Данные пользователя после refreshUserData:', userData);
       
       // Показываем сообщение об успехе
       setIsSuccess(true);
@@ -226,7 +266,7 @@ const EditProfilePage: React.FC = () => {
         navigate('/profile');
       }, 2000);
     } catch (error) {
-      console.error('❌ Ошибка при сохранении профиля:', error);
+      console.error('Общая ошибка сохранения профиля:', error);
       alert('Произошла ошибка при сохранении профиля. Пожалуйста, попробуйте позже.');
     } finally {
       setIsSaving(false);
@@ -235,74 +275,6 @@ const EditProfilePage: React.FC = () => {
 
   const handleCancel = () => {
     navigate('/profile');
-  };
-
-  // Функция для изменения роли пользователя на администратора
-  const makeUserAdmin = async () => {
-    if (!currentUser) {
-      alert('Для изменения роли нужно войти в систему');
-      return;
-    }
-    
-    const confirmed = window.confirm('Вы уверены, что хотите стать администратором? Это предоставит вам расширенные права в системе.');
-    if (!confirmed) return;
-    
-    try {
-      // Принудительно проверяем подключение перед любыми операциями
-      console.log('🔄 Назначение пользователя администратором...');
-      
-      // Обновляем данные в localStorage
-      const updatedUserData = {
-        ...userData,
-        role: 'admin'
-      };
-      
-      // Сохраняем в localStorage
-      localStorage.setItem('userData', JSON.stringify(updatedUserData));
-      
-      // Обновляем состояние пользователя
-      await refreshUserData();
-      
-      console.log('✅ Пользователь назначен администратором');
-      alert('Вы стали администратором!');
-    } catch (error) {
-      console.error('❌ Ошибка при назначении администратора:', error);
-      alert('Произошла ошибка при назначении администратора.');
-    }
-  };
-
-  // Функция для изменения роли пользователя на организатора
-  const makeUserOrganizer = async () => {
-    if (!currentUser) {
-      alert('Для изменения роли нужно войти в систему');
-      return;
-    }
-    
-    const confirmed = window.confirm('Вы уверены, что хотите стать организатором? Это позволит вам создавать и управлять играми.');
-    if (!confirmed) return;
-    
-    try {
-      // Принудительно проверяем подключение перед любыми операциями
-      console.log('🔄 Назначение пользователя организатором...');
-      
-      // Обновляем данные в localStorage
-      const updatedUserData = {
-        ...userData,
-        role: 'organizer'
-      };
-      
-      // Сохраняем в localStorage
-      localStorage.setItem('userData', JSON.stringify(updatedUserData));
-      
-      // Обновляем состояние пользователя
-      await refreshUserData();
-      
-      console.log('✅ Пользователь назначен организатором');
-      alert('Вы стали организатором!');
-    } catch (error) {
-      console.error('❌ Ошибка при назначении организатора:', error);
-      alert('Произошла ошибка при назначении организатора.');
-    }
   };
 
   if (isLoading) {
@@ -375,7 +347,7 @@ const EditProfilePage: React.FC = () => {
             {errors.name && <FormError>{errors.name}</FormError>}
           </FormGroup>
 
-          <FormGroup>
+          {/* <FormGroup>
             <FormLabel htmlFor="email">Email</FormLabel>
             <FormInput
               type="email"
@@ -402,60 +374,9 @@ const EditProfilePage: React.FC = () => {
             />
             {errors.phone && <FormError>{errors.phone}</FormError>}
             <FormHint>Например: +7 (999) 123-45-67</FormHint>
-          </FormGroup>
+          </FormGroup> */}
         </FormSection>
         
-        <FormSection>
-          <SectionTitle>Управление ролью</SectionTitle>
-          <InfoText>
-            Роли определяют ваши возможности в приложении. Выберите роль, соответствующую вашим потребностям:
-          </InfoText>
-
-          <RoleContainer>
-            <RoleOption>
-              <RoleOptionTitle isActive={userData?.role === 'user'}>Пользователь</RoleOptionTitle>
-              <RoleOptionDescription>
-                Базовая роль. Позволяет просматривать игры и присоединяться к ним.
-              </RoleOptionDescription>
-            </RoleOption>
-            
-            <RoleOption>
-              <RoleOptionTitle isActive={userData?.role === 'organizer'}>Организатор</RoleOptionTitle>
-              <RoleOptionDescription>
-                Позволяет создавать и управлять играми, приглашать игроков.
-              </RoleOptionDescription>
-              {userData?.role !== 'organizer' && userData?.role !== 'admin' && (
-                <RoleButton
-                  type="button"
-                  onClick={makeUserOrganizer}
-                  leftIcon={<FiShield />}
-                  variant="primary"
-                  disabled={isSaving}
-                >
-                  Стать организатором
-                </RoleButton>
-              )}
-            </RoleOption>
-            
-            <RoleOption>
-              <RoleOptionTitle isActive={userData?.role === 'admin'}>Администратор</RoleOptionTitle>
-              <RoleOptionDescription>
-                Полные права в системе, включая управление пользователями и всеми играми.
-              </RoleOptionDescription>
-              {userData?.role !== 'admin' && (
-                <AdminButton
-                  type="button"
-                  onClick={makeUserAdmin}
-                  leftIcon={<FiShield />}
-                  disabled={isSaving}
-                >
-                  Стать администратором
-                </AdminButton>
-              )}
-            </RoleOption>
-          </RoleContainer>
-        </FormSection>
-
         <FormActions>
           <Button
             type="button"
@@ -651,54 +572,12 @@ const InfoText = styled.p`
   margin-bottom: ${({ theme }) => theme.space.md};
 `;
 
-const RoleContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.space.lg};
-`;
-
-const RoleOption = styled.div`
-  padding: ${({ theme }) => theme.space.md};
-  background-color: ${({ theme }) => theme.colors.backgroundDark};
-  border-radius: ${({ theme }) => theme.radii.md};
-`;
-
-const RoleOptionTitle = styled.h3<{ isActive?: boolean }>`
-  font-size: ${({ theme }) => theme.fontSizes.lg};
-  font-weight: ${({ theme }) => theme.fontWeights.bold};
-  color: ${({ isActive, theme }) => isActive ? theme.colors.primary : theme.colors.textPrimary};
-  margin-bottom: ${({ theme }) => theme.space.xs};
-`;
-
-const RoleOptionDescription = styled.p`
-  font-size: ${({ theme }) => theme.fontSizes.sm};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  margin-bottom: ${({ theme }) => theme.space.md};
-`;
-
 const FormActions = styled.div`
   display: flex;
   justify-content: flex-end;
   gap: ${({ theme }) => theme.space.md};
   padding: ${({ theme }) => theme.space.lg};
   background-color: ${({ theme }) => theme.colors.backgroundDark};
-`;
-
-const AdminButton = styled(Button)`
-  background-color: ${({ theme, disabled }) => 
-    disabled ? theme.colors.textTertiary : theme.colors.danger};
-  color: white;
-  
-  &:hover:not(:disabled) {
-    background-color: ${({ theme }) => theme.colors.danger};
-    opacity: 0.9;
-  }
-`;
-
-const RoleButton = styled(Button)`
-  &:hover:not(:disabled) {
-    opacity: 0.9;
-  }
 `;
 
 export default EditProfilePage;

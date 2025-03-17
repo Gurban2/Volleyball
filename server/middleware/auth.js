@@ -3,7 +3,16 @@ const config = require('../config/default');
 
 module.exports = function(req, res, next) {
   // Получение токена из заголовка
-  const token = req.header('x-auth-token');
+  let token = req.header('x-auth-token');
+  
+  // Проверка наличия токена в заголовке Authorization
+  if (!token && req.header('Authorization')) {
+    // Получение токена из Authorization: Bearer <token>
+    const authHeader = req.header('Authorization');
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7, authHeader.length);
+    }
+  }
 
   // Проверка наличия токена
   if (!token) {
@@ -18,6 +27,7 @@ module.exports = function(req, res, next) {
     req.user = decoded.user;
     next();
   } catch (err) {
+    console.error('Ошибка проверки токена:', err.message);
     res.status(401).json({ msg: 'Недействительный токен' });
   }
 }; 

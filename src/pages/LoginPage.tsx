@@ -28,18 +28,24 @@ const LoginPage: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent | React.MouseEvent) => {
     setError(null);
     setIsLoading(true);
 
     try {
-      console.log('Вход в систему с данными:', formData.email);
-      await login(formData.email, formData.password);
-      navigate('/');
+      const user = await login(formData.email, formData.password);
+      
+      if (user) {
+        navigate('/');
+      }
     } catch (err: any) {
-      console.error('Ошибка входа:', err);
-      setError(err.message || 'Произошла ошибка при входе. Пожалуйста, попробуйте снова.');
+      // Установка сообщения об ошибке
+      if (err.message && err.message.includes('Неверные учетные данные')) {
+        setError('Неверный email или пароль');
+      } else {
+        setError(err.message || 'Произошла ошибка при входе. Пожалуйста, попробуйте снова.');
+      }
+      // НЕ выполняем перенаправление при ошибке
     } finally {
       setIsLoading(false);
     }
@@ -51,8 +57,7 @@ const LoginPage: React.FC = () => {
         <PageTitle>Вход в систему</PageTitle>
 
         <FormContainer
-          as={motion.form}
-          onSubmit={handleSubmit}
+          as={motion.div}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
@@ -71,40 +76,52 @@ const LoginPage: React.FC = () => {
             </ErrorMessage>
           )}
 
-          <FormGroup>
-            <FormLabel htmlFor="email">Email</FormLabel>
-            <FormInput
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="Введите ваш email"
-              required
-            />
-          </FormGroup>
+          <div>
+            <FormGroup>
+              <FormLabel htmlFor="email">Email</FormLabel>
+              <FormInput
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="Введите ваш email"
+              />
+            </FormGroup>
 
-          <FormGroup>
-            <FormLabel htmlFor="password">Пароль</FormLabel>
-            <FormInput
-              type="password"
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Введите ваш пароль"
-              required
-            />
-          </FormGroup>
+            <FormGroup>
+              <FormLabel htmlFor="password">Пароль</FormLabel>
+              <FormInput
+                type="password"
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Введите ваш пароль"
+              />
+            </FormGroup>
 
-          <Button
-            type="submit"
-            variant="primary"
-            isFullWidth
-            disabled={isLoading}
-          >
-            {isLoading ? 'Вход...' : 'Войти'}
-          </Button>
+            <Button
+              type="button"
+              variant="primary"
+              isFullWidth
+              disabled={isLoading}
+              onClick={(e) => {
+                e.preventDefault(); 
+                e.stopPropagation();
+                // Ручная проверка полей
+                if (!formData.email || !formData.password) {
+                  setError('Пожалуйста, заполните все поля');
+                  return; // Важно! Останавливаем выполнение функции
+                }
+                
+                // Вызываем функцию обработки
+                handleSubmit(e);
+              }}
+            >
+              {isLoading ? 'Вход...' : 'Войти'}
+            </Button>
+          </div>
 
           <FormFooter>
             <p>
@@ -134,7 +151,7 @@ const PageTitle = styled.h1`
   margin-bottom: ${({ theme }) => theme.space.xl};
 `;
 
-const FormContainer = styled.form`
+const FormContainer = styled.div`
   background-color: ${({ theme }) => theme.colors.backgroundLight};
   border-radius: ${({ theme }) => theme.radii.lg};
   box-shadow: ${({ theme }) => theme.shadows.md};

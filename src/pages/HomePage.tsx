@@ -46,7 +46,7 @@ const HomePage: React.FC = () => {
         setLoading(true);
         
         // Make API call to fetch games - we'll get all and take the first 3 as featured
-        const response = await fetch('http://localhost:3000/api/games');
+        const response = await fetch('http://localhost:5000/api/rooms');
         
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);

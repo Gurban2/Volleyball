@@ -50,7 +50,7 @@ const ProfilePage: React.FC = () => {
       console.log(`🔄 Получение игр пользователя ${currentUser?.uid}`);
       
       // Используем полный URL к серверу
-      const response = await fetch('http://localhost:3000/api/games');
+      const response = await fetch('http://localhost:5000/api/rooms');
       
       if (!response.ok) {
         throw new Error(`HTTP ошибка! статус: ${response.status}`);
@@ -112,7 +112,7 @@ const ProfilePage: React.FC = () => {
       // В случае ошибки подключения, попробуем другой URL или порт
       try {
         console.log('🔄 Пробуем альтернативный URL для API...');
-        const alternativeResponse = await fetch('http://localhost:3000/api/games');
+        const alternativeResponse = await fetch('http://localhost:5000/api/rooms');
         
         if (alternativeResponse.ok) {
           const gamesData = await alternativeResponse.json() as any[];

@@ -21,19 +21,30 @@ const LoginForm: React.FC = () => {
     try {
       setError('');
       setLoading(true);
-      await login(email, password);
-      navigate('/');
+      
+      // Дожидаемся результата login()
+      const result = await login(email, password);
+      
+      // Перенаправляем ТОЛЬКО при успешном входе
+      if (result) {
+        navigate('/');
+      }
     } catch (error: any) {
-      if (error.code === 'auth/invalid-credential') {
+      // Обрабатываем ошибку и показываем на странице
+      console.error('Login error:', error);
+      
+      // Четко задаем сообщение об ошибке на основе полученного сообщения
+      if (error.message && error.message.includes('Неверные учетные данные')) {
         setError('Неверный email или пароль');
       } else if (error.code === 'auth/user-not-found') {
         setError('Пользователь не найден');
       } else if (error.code === 'auth/invalid-email') {
         setError('Некорректный email');
       } else {
-        setError('Не удалось войти');
-        console.error(error);
+        // Если это другая ошибка, отображаем ее сообщение напрямую
+        setError(error.message || 'Не удалось войти');
       }
+      // НЕ перенаправляем при ошибке
     } finally {
       setLoading(false);
     }
@@ -93,7 +104,7 @@ const LoginForm: React.FC = () => {
       <SubmitButton 
         type="submit" 
         variant="primary" 
-        size="lg" 
+        size="large" 
         isFullWidth 
         disabled={loading}
       >

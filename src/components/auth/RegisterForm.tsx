@@ -22,25 +22,39 @@ const RegisterForm: React.FC = () => {
     
     // Валидация формы
     if (password !== confirmPassword) {
-      return setError('Пароли не совпадают');
+      setError('Пароли не совпадают');
+      return; // Прерываем выполнение, НЕ перенаправляем
     }
     
     if (password.length < 6) {
-      return setError('Пароль должен содержать минимум 6 символов');
+      setError('Пароль должен содержать минимум 6 символов');
+      return; // Прерываем выполнение, НЕ перенаправляем
     }
     
     try {
       setError('');
       setLoading(true);
-      await register(email, password, name);
-      navigate('/profile/complete');
+      
+      // Дожидаемся результата register()
+      const result = await register(email, password, name);
+      
+      // Перенаправляем ТОЛЬКО при успешной регистрации
+      if (result) {
+        navigate('/profile/complete');
+      }
     } catch (error: any) {
-      if (error.code === 'auth/email-already-in-use') {
+      // Обрабатываем ошибку и показываем на странице
+      console.error('Registration error:', error);
+      if (error.message && error.message.includes('email уже зарегистрирован')) {
+        setError('Этот email уже зарегистрирован');
+      } else if (error.message && error.message.includes('имя уже существует')) {
+        setError('Это имя пользователя уже занято');
+      } else if (error.code === 'auth/email-already-in-use') {
         setError('Этот email уже зарегистрирован');
       } else {
-        setError('Ошибка при создании аккаунта');
-        console.error(error);
+        setError(error.message || 'Ошибка при создании аккаунта');
       }
+      // НЕ перенаправляем при ошибке
     } finally {
       setLoading(false);
     }

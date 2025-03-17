@@ -3,6 +3,7 @@ const router = express.Router();
 const { check } = require('express-validator');
 const userController = require('../../controllers/userController');
 const auth = require('../../middleware/auth');
+const admin = require('../../middleware/admin');
 
 // @route   POST api/users/register
 // @desc    Регистрация нового пользователя
@@ -24,7 +25,7 @@ router.post('/login', [
 // @route   GET api/users
 // @desc    Получение списка пользователей
 // @access  Private (только admin)
-router.get('/', auth, userController.getUsers);
+router.get('/', [auth, admin], userController.getUsers);
 
 // @route   GET api/users/me
 // @desc    Получение информации о текущем пользователе

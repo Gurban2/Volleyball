@@ -23,17 +23,19 @@ const Button: React.FC<ButtonProps> = ({
   leftIcon,
   rightIcon,
   disabled,
+  type = 'button',
   ...props
 }) => {
   return (
     <StyledButton
-      as={props.to ? Link : motion.button}
-      whileTap={{ scale: 0.98 }}
+      as={props.to ? Link : 'button'}
+      whileTap={props.to ? undefined : { scale: 0.98 }}
       variant={variant}
       size={size}
       $isFullWidth={isFullWidth}
       $isLoading={isLoading}
       disabled={disabled || isLoading}
+      type={type}
       {...props}
     >
       {isLoading && <LoadingSpinner />}

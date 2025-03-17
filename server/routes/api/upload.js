@@ -55,7 +55,7 @@ const upload = multer({
 // @route   POST api/upload
 // @desc    Загрузка файла
 // @access  Private
-router.post('/', auth, upload.single('file'), (req, res) => {
+router.post('/', auth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'Файл не загружен' });
@@ -65,6 +65,27 @@ router.post('/', auth, upload.single('file'), (req, res) => {
     const relativePath = req.file.path.split('uploads')[1].replace(/\\/g, '/');
     const fileUrl = `/uploads${relativePath}`;
     
+    const uploadResponse = await fetch('http://localhost:5000/api/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${req.user.token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fileUrl: fileUrl,
+        fileName: req.file.filename
+      })
+    });
+
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json();
+      console.error('Ошибка загрузки файла:', errorData.message || 'Неизвестная ошибка');
+      throw new Error('Ошибка загрузки файла');
+    }
+
+    const data = await uploadResponse.json();
+    console.log('Ответ сервера при загрузке файла:', data);
+
     res.json({ 
       message: 'Файл успешно загружен',
       fileUrl: fileUrl,

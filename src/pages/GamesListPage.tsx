@@ -29,32 +29,29 @@ const GamesListPage: React.FC = () => {
         setError(null);
         
         // Make API call to fetch all games
-        const response = await fetch('http://localhost:3000/api/games');
+        const response = await fetch('http://localhost:5000/api/rooms');
         
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
-        const gamesData = await response.json() as any[];
-        console.log('Games data from API:', gamesData);
+        const roomsData = await response.json() as any[];
+        console.log('Rooms data from API:', roomsData);
         
         // Transform the API response to match our GameCardProps type
-        const transformedGames: GameCardProps[] = gamesData.map((gameData: any) => ({
-          id: gameData.id,
-          title: gameData.name || gameData.title || 
-            (gameData.homeTeam && gameData.awayTeam 
-              ? `${gameData.homeTeam.name} vs ${gameData.awayTeam.name}` 
-              : 'Игра без названия'),
-          location: gameData.location || '',
-          date: gameData.date || '',
-          time: gameData.time || '',
-          format: gameData.format || 'Unknown',
-          totalSpots: gameData.totalSpots || gameData.capacity || 0,
-          availableSpots: gameData.availableSpots || (gameData.capacity - (gameData.participants?.length || 0)) || 0,
-          imageUrl: gameData.imageUrl,
-          organizer: gameData.organizer ? {
-            name: gameData.organizer.name || 'Unknown Organizer',
-            avatar: gameData.organizer.avatar,
+        const transformedGames: GameCardProps[] = roomsData.map((room: any) => ({
+          id: room._id,
+          title: room.name,
+          location: room.location || '',
+          date: new Date(room.time).toLocaleDateString(),
+          time: new Date(room.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          format: room.type || 'public',
+          totalSpots: room.maxPlayers || 0,
+          availableSpots: room.maxPlayers - (room.players?.length || 0) || 0,
+          imageUrl: room.imageUrl,
+          organizer: room.organizer ? {
+            name: room.organizer.username || 'Unknown Organizer',
+            avatar: room.organizer.profileImage,
           } : undefined,
         }));
         

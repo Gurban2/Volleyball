@@ -108,22 +108,46 @@ const CompleteProfilePage: React.FC = () => {
       // Обработка фотографии, если она была выбрана
       if (formData.avatar) {
         try {
-          console.log('🔄 Обработка фото...');
+          // Загрузка фото через API
+          const fileFormData = new FormData();
+          fileFormData.append('file', formData.avatar);
           
-          // Просто создаем локальный URL для аватара
-          photoURL = URL.createObjectURL(formData.avatar);
+          // Добавляем путь пользователя для организации файлов
+          if (currentUser?.uid) {
+            fileFormData.append('path', `users/${currentUser.uid}`);
+          }
           
-          console.log('✅ Файл обработан, получен URL:', photoURL);
+          // Временно используем avatarPreview вместо загрузки на сервер
+          photoURL = formData.avatarPreview;
+
+          // Или используем существующий маршрут /api/upload
+          const uploadResponse = await fetch('http://localhost:5000/api/upload', {
+            method: 'POST',
+            body: fileFormData,
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            }
+          });
+          
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json();
+            console.error('Ошибка загрузки фото:', errorData.message || 'Неизвестная ошибка');
+            throw new Error('Ошибка загрузки фото');
+          }
+          
+          const data = await uploadResponse.json();
+          console.log('Ответ сервера при загрузке фото:', data);
+          photoURL = data.fileUrl; // API возвращает URL загруженного файла в поле fileUrl
+          
+          // Затем этот URL будет сохранен в профиле пользователя как profileImage
         } catch (uploadError) {
-          console.error('❌ Ошибка при обработке файла:', uploadError);
+          console.error('Ошибка при загрузке фото:', uploadError);
           alert('Произошла ошибка при обработке фото. Профиль будет создан без фотографии.');
           photoURL = null;
         }
       }
       
-      console.log('🔄 Сохраняем данные профиля...');
-      
-      // Имитация сохранения данных в localStorage вместо Firestore
+      // Сохранение данных пользователя
       if (currentUser) {
         // Создаем обновленные данные пользователя
         const updatedUserData = {
@@ -138,16 +162,42 @@ const CompleteProfilePage: React.FC = () => {
         // Сохраняем в localStorage
         localStorage.setItem('userData', JSON.stringify(updatedUserData));
         
+        // Также отправляем на сервер обновление профиля с новым изображением
+        try {
+          const updateResponse = await fetch('http://localhost:5000/api/users/me', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            },
+            body: JSON.stringify({
+              username: formData.nickname,
+              profileImage: photoURL // Это поле profileImage в MongoDB
+            })
+          });
+          
+          if (!updateResponse.ok) {
+            const errorData = await updateResponse.json();
+            console.error('Ошибка обновления профиля:', errorData.msg || 'Неизвестная ошибка');
+            throw new Error('Ошибка обновления профиля на сервере');
+          }
+          
+          const updatedUser = await updateResponse.json();
+          console.log('Профиль успешно обновлен:', updatedUser);
+        } catch (updateError) {
+          console.error('Ошибка при обновлении профиля:', updateError);
+          // Продолжаем выполнение даже при ошибке обновления на сервере
+          // Мы уже сохранили данные в localStorage
+        }
+        
         // Обновляем состояние пользователя
         await refreshUserData();
-        
-        console.log('✅ Профиль успешно создан');
+        console.log('Данные пользователя после refreshUserData:', userData);
         
         // Перенаправляем на страницу профиля
         navigate('/profile');
       }
     } catch (error) {
-      console.error('❌ Ошибка при создании профиля:', error);
       alert('Произошла ошибка при создании профиля. Пожалуйста, попробуйте позже.');
     } finally {
       setIsSaving(false);
@@ -249,7 +299,7 @@ const CompleteProfilePage: React.FC = () => {
             <FormActions>
               <SubmitButton 
                 type="submit" 
-                loading={isSaving}
+                isLoading={isSaving}
               >
                 Сохранить профиль
               </SubmitButton>
@@ -431,7 +481,7 @@ const FormActions = styled.div`
 `;
 
 interface SubmitButtonProps {
-  loading?: boolean;
+  isLoading?: boolean;
 }
 
 const SubmitButton = styled(Button)<SubmitButtonProps>`

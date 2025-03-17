@@ -39,4 +39,7 @@ coverage
 *.tgz
 
 # Yarn Integrity file
-.yarn-integrity 
+.yarn-integrity
+
+# Uploads directory
+/uploads
